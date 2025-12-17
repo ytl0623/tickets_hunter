@@ -35,63 +35,72 @@ from typing import (
     overload,
 )
 
+# 嘗試匯入 ddddocr 驗證碼辨識庫，若環境未安裝則略過，不影響主程式執行
 try:
     import ddddocr
 except Exception as exc:
     pass
 
-# Get script directory for resource paths
+# 取得腳本所在目錄，用於定位資源檔案
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# 應用程式版本常數
 CONST_APP_VERSION = "TicketsHunter (2025.12.15)"
 
+# 定義各種設定檔與狀態檔案的名稱
 CONST_MAXBOT_ANSWER_ONLINE_FILE = "MAXBOT_ONLINE_ANSWER.txt"
 CONST_MAXBOT_CONFIG_FILE = "settings.json"
 CONST_MAXBOT_EXTENSION_NAME = "Maxbotplus_1.0.0"
 CONST_MAXBOT_EXTENSION_STATUS_JSON = "status.json"
-CONST_MAXBOT_INT28_FILE = "MAXBOT_INT28_IDLE.txt"
-CONST_MAXBOT_LAST_URL_FILE = "MAXBOT_LAST_URL.txt"
-CONST_MAXBOT_QUESTION_FILE = "MAXBOT_QUESTION.txt"
+CONST_MAXBOT_INT28_FILE = "MAXBOT_INT28_IDLE.txt"    # 用於標記機器人是否處於暫停狀態的檔案
+CONST_MAXBOT_LAST_URL_FILE = "MAXBOT_LAST_URL.txt"   # 紀錄最後訪問網址的檔案
+CONST_MAXBOT_QUESTION_FILE = "MAXBOT_QUESTION.txt"   # 題目檔案
 
-CONST_SERVER_PORT = 16888
+CONST_SERVER_PORT = 16888  # 預設 Web Server 埠號
 
+# 選位與選區的邏輯常數
 CONST_FROM_TOP_TO_BOTTOM = "from top to bottom"
 CONST_FROM_BOTTOM_TO_TOP = "from bottom to top"
 CONST_CENTER = "center"
 CONST_RANDOM = "random"
 CONST_SELECT_ORDER_DEFAULT = CONST_RANDOM
-CONST_EXCLUDE_DEFAULT = "\"輪椅\",\"身障\",\"身心\",\"障礙\",\"Restricted View\",\"燈柱遮蔽\",\"視線不完整\""
-CONST_CAPTCHA_SOUND_FILENAME_DEFAULT = "assets/sounds/ding-dong.wav"
+CONST_EXCLUDE_DEFAULT = "\"輪椅\",\"身障\",\"身心\",\"障礙\",\"Restricted View\",\"燈柱遮蔽\",\"視線不完整\"" # 預設排除的關鍵字
+CONST_CAPTCHA_SOUND_FILENAME_DEFAULT = "assets/sounds/ding-dong.wav" # 驗證碼提示音
 CONST_HOMEPAGE_DEFAULT = "about:blank"
 
+# OCR 圖片來源定義
 CONST_OCR_CAPTCH_IMAGE_SOURCE_NON_BROWSER = "NonBrowser"
 CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS = "canvas"
 
+# 瀏覽器驅動類型
 CONST_WEBDRIVER_TYPE_SELENIUM = "selenium"
 CONST_WEBDRIVER_TYPE_UC = "undetected_chromedriver"
 CONST_WEBDRIVER_TYPE_DP = "DrissionPage"
 CONST_WEBDRIVER_TYPE_NODRIVER = "nodriver"
 
-CONST_SUPPORTED_SITES = ["https://kktix.com"
-    ,"https://tixcraft.com (拓元)"
-    ,"https://ticketmaster.sg"
+# 支援的售票網站列表
+CONST_SUPPORTED_SITES = [
+    "https://kktix.com",
+    "https://tixcraft.com (拓元)",
+    "https://ticketmaster.sg",
     #,"https://ticketmaster.com"
-    ,"https://teamear.tixcraft.com/ (添翼)"
-    ,"https://www.indievox.com/ (獨立音樂)"
-    ,"https://www.famiticket.com.tw (全網)"
-    ,"https://ticket.ibon.com.tw/"
-    ,"https://kham.com.tw/ (寬宏)"
-    ,"https://ticket.com.tw/ (年代)"
-    ,"https://tickets.udnfunlife.com/ (udn售票網)"
-    ,"https://ticketplus.com.tw/ (遠大)"
-    ,"===[香港或南半球的系統]==="
-    ,"http://www.urbtix.hk/ (城市)"
-    ,"https://www.cityline.com/ (買飛)"
-    ,"https://hotshow.hkticketing.com/ (快達票)"
-    ,"https://ticketing.galaxymacau.com/ (澳門銀河)"
-    ,"http://premier.ticketek.com.au"
-    ]
+    "https://teamear.tixcraft.com/ (添翼)",
+    "https://www.indievox.com/ (獨立音樂)",
+    "https://www.famiticket.com.tw (全網)",
+    "https://ticket.ibon.com.tw/",
+    "https://kham.com.tw/ (寬宏)",
+    "https://ticket.com.tw/ (年代)",
+    "https://tickets.udnfunlife.com/ (udn售票網)",
+    "https://ticketplus.com.tw/ (遠大)",
+    "===[香港或南半球的系統]===",
+    "http://www.urbtix.hk/ (城市)",
+    "https://www.cityline.com/ (買飛)",
+    "https://hotshow.hkticketing.com/ (快達票)",
+    "https://ticketing.galaxymacau.com/ (澳門銀河)",
+    "http://premier.ticketek.com.au"
+]
 
+# 相關連結常數
 URL_DONATE = 'https://max-everyday.com/about/#donate'
 URL_HELP = 'https://max-everyday.com/2018/03/tixcraft-bot/'
 URL_RELEASE = 'https://github.com/bouob/tickets_hunter/releases'
@@ -101,7 +110,11 @@ URL_EDGE_DRIVER = 'https://developer.microsoft.com/zh-tw/microsoft-edge/tools/we
 
 
 def get_default_config():
-    config_dict={}
+    """
+    產生預設的設定檔字典 (Dictionary)。
+    當沒有 settings.json 時會呼叫此函式。
+    """
+    config_dict = {}
 
     config_dict["homepage"] = CONST_HOMEPAGE_DEFAULT
     config_dict["browser"] = "chrome"
@@ -109,6 +122,7 @@ def get_default_config():
     config_dict["ticket_number"] = 2
     config_dict["refresh_datetime"] = ""
 
+    # OCR 驗證碼設定
     config_dict["ocr_captcha"] = {}
     config_dict["ocr_captcha"]["enable"] = True
     config_dict["ocr_captcha"]["beta"] = True
@@ -117,36 +131,41 @@ def get_default_config():
     config_dict["ocr_captcha"]["path"] = ""
     config_dict["webdriver_type"] = CONST_WEBDRIVER_TYPE_NODRIVER
 
+    # 日期自動選擇設定
     config_dict["date_auto_select"] = {}
     config_dict["date_auto_select"]["enable"] = True
     config_dict["date_auto_select"]["date_keyword"] = ""
     config_dict["date_auto_select"]["mode"] = CONST_SELECT_ORDER_DEFAULT
 
+    # 區域自動選擇設定
     config_dict["area_auto_select"] = {}
     config_dict["area_auto_select"]["enable"] = True
     config_dict["area_auto_select"]["mode"] = CONST_SELECT_ORDER_DEFAULT
     config_dict["area_auto_select"]["area_keyword"] = ""
     config_dict["keyword_exclude"] = CONST_EXCLUDE_DEFAULT
 
-    config_dict['kktix']={}
+    # KKTIX 專屬設定
+    config_dict['kktix'] = {}
     config_dict["kktix"]["auto_press_next_step_button"] = True
     config_dict["kktix"]["auto_fill_ticket_number"] = True
     config_dict["kktix"]["max_dwell_time"] = 90
 
-    config_dict['cityline']={}
+    config_dict['cityline'] = {}
 
-    config_dict['tixcraft']={}
-    config_dict["tixcraft"]["pass_date_is_sold_out"] = True
+    # 拓元專屬設定
+    config_dict['tixcraft'] = {}
+    config_dict["tixcraft"]["pass_date_is_sold_out"] = True # 若日期顯示完售則跳過
     config_dict["tixcraft"]["auto_reload_coming_soon_page"] = True
 
+    # 進階設定
+    config_dict['advanced'] = {}
 
-    config_dict['advanced']={}
-
-    config_dict['advanced']['play_sound']={}
+    config_dict['advanced']['play_sound'] = {}
     config_dict["advanced"]["play_sound"]["ticket"] = True
     config_dict["advanced"]["play_sound"]["order"] = True
     config_dict["advanced"]["play_sound"]["filename"] = CONST_CAPTCHA_SOUND_FILENAME_DEFAULT
 
+    # 各平台帳號欄位 (預設為空)
     config_dict["advanced"]["tixcraft_sid"] = ""
     config_dict["advanced"]["ibonqware"] = ""
     config_dict["advanced"]["facebook_account"] = ""
@@ -160,6 +179,7 @@ def get_default_config():
     config_dict["advanced"]["udn_account"] = ""
     config_dict["advanced"]["ticketplus_account"] = ""
 
+    # 各平台密碼欄位 (儲存加密後的字串)
     config_dict["advanced"]["facebook_password"] = ""
     config_dict["advanced"]["kktix_password"] = ""
     config_dict["advanced"]["fami_password"] = ""
@@ -171,6 +191,7 @@ def get_default_config():
     config_dict["advanced"]["udn_password"] = ""
     config_dict["advanced"]["ticketplus_password"] = ""
 
+    # 明文密碼欄位 (通常不建議直接儲存，僅供暫時使用或舊版相容)
     config_dict["advanced"]["facebook_password_plaintext"] = ""
     config_dict["advanced"]["kktix_password_plaintext"] = ""
     config_dict["advanced"]["fami_password_plaintext"] = ""
@@ -183,18 +204,18 @@ def get_default_config():
     config_dict["advanced"]["ticketplus_password_plaintext"] = ""
 
     config_dict["advanced"]["chrome_extension"] = True
-    config_dict["advanced"]["disable_adjacent_seat"] = False
-    config_dict["advanced"]["hide_some_image"] = False
+    config_dict["advanced"]["disable_adjacent_seat"] = False # 是否禁用連續座位
+    config_dict["advanced"]["hide_some_image"] = False       # 隱藏部分圖片以加速
     config_dict["advanced"]["block_facebook_network"] = False
 
-    config_dict["advanced"]["headless"] = False
-    config_dict["advanced"]["verbose"] = False
+    config_dict["advanced"]["headless"] = False              # 無頭模式
+    config_dict["advanced"]["verbose"] = False               # 詳細日誌
     config_dict["advanced"]["auto_guess_options"] = False
     config_dict["advanced"]["user_guess_string"] = ""
 
-    # Server port for settings web interface (Issue #156)
+    # 伺服器埠號設定 (Issue #156)
     config_dict["advanced"]["server_port"] = CONST_SERVER_PORT
-    # remote_url will be dynamically generated based on server_port
+    # remote_url 將基於 server_port 動態產生
     config_dict["advanced"]["remote_url"] = ""
 
     config_dict["advanced"]["auto_reload_page_interval"] = 5
@@ -204,18 +225,20 @@ def get_default_config():
     config_dict["advanced"]["proxy_server_port"] = ""
     config_dict["advanced"]["window_size"] = "600,1024"
 
+    # 閒置與恢復的關鍵字設定
     config_dict["advanced"]["idle_keyword"] = ""
     config_dict["advanced"]["resume_keyword"] = ""
     config_dict["advanced"]["idle_keyword_second"] = ""
     config_dict["advanced"]["resume_keyword_second"] = ""
 
-    # Keyword priority fallback (Feature 003)
-    config_dict["date_auto_fallback"] = False  # default: strict mode (avoid unwanted purchases)
-    config_dict["area_auto_fallback"] = False  # default: strict mode (avoid unwanted purchases)
+    # 關鍵字優先順序回退機制 (Feature 003)
+    config_dict["date_auto_fallback"] = False  # 預設：嚴格模式 (避免買錯)
+    config_dict["area_auto_fallback"] = False  # 預設：嚴格模式 (避免買錯)
 
     return config_dict
 
 def read_last_url_from_file():
+    """讀取最後訪問的 URL"""
     app_root = util.get_app_root()
     last_url_filepath = os.path.join(app_root, CONST_MAXBOT_LAST_URL_FILE)
     text = ""
@@ -228,11 +251,14 @@ def read_last_url_from_file():
     return text
 
 def migrate_config(config_dict):
-    """Migrate old config structure to new structure."""
+    """
+    遷移舊版設定結構至新版結構。
+    確保舊版的 settings.json 在新版程式中也能正常運作。
+    """
     if config_dict is None:
         return config_dict
 
-    # Migrate ocr_model_path from advanced to ocr_captcha.path
+    # 將 advanced 下的 ocr_model_path 遷移至 ocr_captcha.path
     if "advanced" in config_dict and "ocr_model_path" in config_dict["advanced"]:
         if "ocr_captcha" not in config_dict:
             config_dict["ocr_captcha"] = {}
@@ -240,11 +266,11 @@ def migrate_config(config_dict):
             config_dict["ocr_captcha"]["path"] = config_dict["advanced"]["ocr_model_path"]
         del config_dict["advanced"]["ocr_model_path"]
 
-    # Ensure ocr_captcha.path exists
+    # 確保 ocr_captcha.path 存在
     if "ocr_captcha" in config_dict and "path" not in config_dict["ocr_captcha"]:
         config_dict["ocr_captcha"]["path"] = ""
 
-    # Migrate server_port: ensure old config has this field (Issue #156)
+    # 遷移 server_port: 確保舊設定檔有此欄位 (Issue #156)
     if "advanced" in config_dict:
         if "server_port" not in config_dict["advanced"]:
             config_dict["advanced"]["server_port"] = CONST_SERVER_PORT
@@ -252,9 +278,10 @@ def migrate_config(config_dict):
     return config_dict
 
 def load_json():
+    """載入設定檔 settings.json"""
     app_root = util.get_app_root()
 
-    # overwrite config path.
+    # 設定檔路徑
     config_filepath = os.path.join(app_root, CONST_MAXBOT_CONFIG_FILE)
 
     config_dict = None
@@ -265,14 +292,16 @@ def load_json():
         except Exception as e:
             pass
     else:
+        # 若檔案不存在則載入預設值
         config_dict = get_default_config()
 
-    # Apply migrations for backward compatibility
+    # 套用遷移邏輯以相容舊版設定
     config_dict = migrate_config(config_dict)
 
     return config_filepath, config_dict
 
 def reset_json():
+    """重置設定檔（刪除後重新產生預設值）"""
     app_root = util.get_app_root()
     config_filepath = os.path.join(app_root, CONST_MAXBOT_CONFIG_FILE)
     if os.path.exists(str(config_filepath)):
@@ -286,6 +315,7 @@ def reset_json():
     return config_filepath, config_dict
 
 def decrypt_password(config_dict):
+    """解密設定檔中的密碼欄位 (用於載入時)"""
     config_dict["advanced"]["facebook_password"] = util.decryptMe(config_dict["advanced"]["facebook_password"])
     config_dict["advanced"]["kktix_password"] = util.decryptMe(config_dict["advanced"]["kktix_password"])
     config_dict["advanced"]["fami_password"] = util.decryptMe(config_dict["advanced"]["fami_password"])
@@ -299,6 +329,7 @@ def decrypt_password(config_dict):
     return config_dict
 
 def encrypt_password(config_dict):
+    """加密設定檔中的密碼欄位 (用於存檔時)"""
     config_dict["advanced"]["facebook_password"] = util.encryptMe(config_dict["advanced"]["facebook_password"])
     config_dict["advanced"]["kktix_password"] = util.encryptMe(config_dict["advanced"]["kktix_password"])
     config_dict["advanced"]["fami_password"] = util.encryptMe(config_dict["advanced"]["fami_password"])
@@ -312,6 +343,7 @@ def encrypt_password(config_dict):
     return config_dict
 
 def maxbot_idle():
+    """建立閒置標記檔案，讓 Bot 進入暫停狀態"""
     app_root = util.get_app_root()
     idle_filepath = os.path.join(app_root, CONST_MAXBOT_INT28_FILE)
     try:
@@ -321,12 +353,15 @@ def maxbot_idle():
         pass
 
 def maxbot_resume():
+    """移除閒置標記檔案，讓 Bot 恢復運作"""
     app_root = util.get_app_root()
     idle_filepath = os.path.join(app_root, CONST_MAXBOT_INT28_FILE)
+    # 嘗試多次刪除以確保成功
     for i in range(3):
-         util.force_remove_file(idle_filepath)
+        util.force_remove_file(idle_filepath)
 
 def launch_maxbot():
+    """啟動搶票主程式"""
     global launch_counter
     if "launch_counter" in globals():
         launch_counter += 1
@@ -335,57 +370,65 @@ def launch_maxbot():
 
     config_filepath, config_dict = load_json()
     config_dict = decrypt_password(config_dict)
-    
+
     script_name = "chrome_tixcraft"
     if config_dict["webdriver_type"] == CONST_WEBDRIVER_TYPE_NODRIVER:
         script_name = "nodriver_tixcraft"
 
     window_size = config_dict["advanced"]["window_size"]
+    # 處理多開視窗的位置偏移
     if len(window_size) > 0:
         if "," in window_size:
             size_array = window_size.split(",")
             target_width = int(size_array[0])
             target_left = target_width * launch_counter
-            #print("target_left:", target_left)
+            # print("target_left:", target_left)
             if target_left >= 1440:
                 launch_counter = 0
             window_size = window_size + "," + str(launch_counter)
-            #print("window_size:", window_size)
+            # print("window_size:", window_size)
 
-    threading.Thread(target=util.launch_maxbot, args=(script_name,"","","","",window_size,)).start()
+    # 開啟新執行緒執行 Bot 腳本
+    threading.Thread(target=util.launch_maxbot, args=(script_name, "", "", "", "", window_size,)).start()
 
 def change_maxbot_status_by_keyword():
+    """根據時間關鍵字自動切換 Bot 的閒置/恢復狀態"""
     config_filepath, config_dict = load_json()
 
     system_clock_data = datetime.now()
     current_time = system_clock_data.strftime('%H:%M:%S')
-    #print('Current Time is:', current_time)
-    #print("idle_keyword", config_dict["advanced"]["idle_keyword"])
-    if len(config_dict["advanced"]["idle_keyword"]) > 0:
-        is_matched =  util.is_text_match_keyword(config_dict["advanced"]["idle_keyword"], current_time)
-        if is_matched:
-            #print("match to idle:", current_time)
-            maxbot_idle()
-    #print("resume_keyword", config_dict["advanced"]["resume_keyword"])
-    if len(config_dict["advanced"]["resume_keyword"]) > 0:
-        is_matched =  util.is_text_match_keyword(config_dict["advanced"]["resume_keyword"], current_time)
-        if is_matched:
-            #print("match to resume:", current_time)
-            maxbot_resume()
+    # print('Current Time is:', current_time)
     
-    current_time = system_clock_data.strftime('%S')
-    if len(config_dict["advanced"]["idle_keyword_second"]) > 0:
-        is_matched =  util.is_text_match_keyword(config_dict["advanced"]["idle_keyword_second"], current_time)
+    # 檢查是否符合暫停關鍵字 (HH:MM:SS)
+    if len(config_dict["advanced"]["idle_keyword"]) > 0:
+        is_matched = util.is_text_match_keyword(config_dict["advanced"]["idle_keyword"], current_time)
         if is_matched:
-            #print("match to idle:", current_time)
+            # print("match to idle:", current_time)
             maxbot_idle()
-    if len(config_dict["advanced"]["resume_keyword_second"]) > 0:
-        is_matched =  util.is_text_match_keyword(config_dict["advanced"]["resume_keyword_second"], current_time)
+    
+    # 檢查是否符合恢復關鍵字 (HH:MM:SS)
+    if len(config_dict["advanced"]["resume_keyword"]) > 0:
+        is_matched = util.is_text_match_keyword(config_dict["advanced"]["resume_keyword"], current_time)
         if is_matched:
-            #print("match to resume:", current_time)
+            # print("match to resume:", current_time)
+            maxbot_resume()
+
+    current_time = system_clock_data.strftime('%S')
+    # 檢查是否符合暫停關鍵字 (僅秒數)
+    if len(config_dict["advanced"]["idle_keyword_second"]) > 0:
+        is_matched = util.is_text_match_keyword(config_dict["advanced"]["idle_keyword_second"], current_time)
+        if is_matched:
+            # print("match to idle:", current_time)
+            maxbot_idle()
+    # 檢查是否符合恢復關鍵字 (僅秒數)
+    if len(config_dict["advanced"]["resume_keyword_second"]) > 0:
+        is_matched = util.is_text_match_keyword(config_dict["advanced"]["resume_keyword_second"], current_time)
+        if is_matched:
+            # print("match to resume:", current_time)
             maxbot_resume()
 
 def clean_extension_status():
+    """清除瀏覽器擴充功能的狀態檔"""
     Root_Dir = util.get_app_root()
     webdriver_path = os.path.join(Root_Dir, "webdriver")
     target_path = os.path.join(webdriver_path, CONST_MAXBOT_EXTENSION_NAME)
@@ -399,16 +442,17 @@ def clean_extension_status():
             pass
 
 def sync_status_to_extension(status):
+    """將目前的 Bot 狀態同步給瀏覽器擴充功能"""
     Root_Dir = util.get_app_root()
     webdriver_path = os.path.join(Root_Dir, "webdriver")
     target_path = os.path.join(webdriver_path, CONST_MAXBOT_EXTENSION_NAME)
     target_path = os.path.join(target_path, "data")
     if os.path.exists(target_path):
         target_path = os.path.join(target_path, CONST_MAXBOT_EXTENSION_STATUS_JSON)
-        #print("save as to:", target_path)
-        status_json={}
-        status_json["status"]=status
-        #print("dump json to path:", target_path)
+        # print("save as to:", target_path)
+        status_json = {}
+        status_json["status"] = status
+        # print("dump json to path:", target_path)
         try:
             with open(target_path, 'w', encoding='utf-8') as outfile:
                 json.dump(status_json, outfile)
@@ -416,15 +460,17 @@ def sync_status_to_extension(status):
             pass
 
 def clean_tmp_file():
+    """清除程式產生的暫存檔"""
     app_root = util.get_app_root()
-    remove_file_list = [CONST_MAXBOT_LAST_URL_FILE
-        ,CONST_MAXBOT_INT28_FILE
-        ,CONST_MAXBOT_ANSWER_ONLINE_FILE
-        ,CONST_MAXBOT_QUESTION_FILE
+    remove_file_list = [
+        CONST_MAXBOT_LAST_URL_FILE,
+        CONST_MAXBOT_INT28_FILE,
+        CONST_MAXBOT_ANSWER_ONLINE_FILE,
+        CONST_MAXBOT_QUESTION_FILE
     ]
     for filename in remove_file_list:
-         filepath = os.path.join(app_root, filename)
-         util.force_remove_file(filepath)
+        filepath = os.path.join(app_root, filename)
+        util.force_remove_file(filepath)
 
     Root_Dir = util.get_app_root()
     target_folder = os.listdir(Root_Dir)
@@ -432,10 +478,12 @@ def clean_tmp_file():
         if item.endswith(".tmp"):
             os.remove(os.path.join(Root_Dir, item))
 
+# ==================== Tornado Handlers ====================
+
 class NoCacheStaticFileHandler(StaticFileHandler):
-    """Custom StaticFileHandler that prevents caching of settings.html"""
+    """自訂的 StaticFileHandler，防止 settings.html 被瀏覽器快取"""
     def set_extra_headers(self, path):
-        # Disable caching only for settings.html to prevent stale UI issues
+        # 只針對 settings.html 禁用快取，避免 UI 更新後看不到效果
         if path == 'settings.html':
             self.set_header('Cache-Control', 'no-cache, no-store, must-revalidate')
             self.set_header('Pragma', 'no-cache')
@@ -443,11 +491,11 @@ class NoCacheStaticFileHandler(StaticFileHandler):
 
 class QuestionHandler(tornado.web.RequestHandler):
     def get(self):
-        """Read MAXBOT_QUESTION.txt and return its content"""
+        """讀取 MAXBOT_QUESTION.txt 並回傳內容"""
         question_text = ""
         question_file = os.path.join(SCRIPT_DIR, CONST_MAXBOT_QUESTION_FILE)
 
-        # Check if file exists
+        # 檢查檔案是否存在
         if os.path.exists(question_file):
             try:
                 with open(question_file, "r", encoding="utf-8") as f:
@@ -455,7 +503,7 @@ class QuestionHandler(tornado.web.RequestHandler):
             except Exception as e:
                 print(f"Error reading question file: {e}")
 
-        # Return JSON response
+        # 回傳 JSON
         self.write({
             "exists": os.path.exists(question_file),
             "question": question_text
@@ -463,7 +511,7 @@ class QuestionHandler(tornado.web.RequestHandler):
 
 class VersionHandler(tornado.web.RequestHandler):
     def get(self):
-        self.write({"version":self.application.version})
+        self.write({"version": self.application.version})
 
 class ShutdownHandler(tornado.web.RequestHandler):
     def get(self):
@@ -472,10 +520,12 @@ class ShutdownHandler(tornado.web.RequestHandler):
         self.write({"showdown": GLOBAL_SERVER_SHUTDOWN})
 
 class StatusHandler(tornado.web.RequestHandler):
+    """回傳目前 Bot 的運作狀態"""
     def get(self):
         is_paused = False
         app_root = util.get_app_root()
         idle_filepath = os.path.join(app_root, CONST_MAXBOT_INT28_FILE)
+        # 若暫停檔存在，代表目前暫停中
         if os.path.exists(idle_filepath):
             is_paused = True
         url = read_last_url_from_file()
@@ -502,7 +552,7 @@ class LoadJsonHandler(tornado.web.RequestHandler):
         config_filepath, config_dict = load_json()
         config_dict = decrypt_password(config_dict)
 
-        # Dynamically generate remote_url based on server_port (Issue #156)
+        # 根據 server_port 動態產生 remote_url (Issue #156)
         server_port = config_dict.get("advanced", {}).get("server_port", CONST_SERVER_PORT)
         if not isinstance(server_port, int) or server_port < 1024 or server_port > 65535:
             server_port = CONST_SERVER_PORT
@@ -523,9 +573,10 @@ class SaveJsonHandler(tornado.web.RequestHandler):
         error_message = ""
         error_code = 0
 
+        # 解析 JSON Body
         if is_pass_check:
             is_pass_check = False
-            try :
+            try:
                 _body = json.loads(self.request.body)
                 is_pass_check = True
             except Exception:
@@ -538,17 +589,19 @@ class SaveJsonHandler(tornado.web.RequestHandler):
             config_filepath = os.path.join(app_root, CONST_MAXBOT_CONFIG_FILE)
             config_dict = encrypt_password(_body)
 
+            # 檢查並修正 KKTIX 停留時間
             if config_dict["kktix"]["max_dwell_time"] > 0:
                 if config_dict["kktix"]["max_dwell_time"] < 15:
-                    # min value is 15 seconds.
+                    # 最小值限制為 15 秒
                     config_dict["kktix"]["max_dwell_time"] = 15
 
+            # 檢查並修正瀏覽器重啟間隔
             if config_dict["advanced"]["reset_browser_interval"] > 0:
                 if config_dict["advanced"]["reset_browser_interval"] < 20:
-                    # min value is 20 seconds.
+                    # 最小值限制為 20 秒
                     config_dict["advanced"]["reset_browser_interval"] = 20
 
-            # due to cloudflare.
+            # 針對 Cityline 因應 Cloudflare 限制，強制使用 nodriver
             if ".cityline.com" in config_dict["homepage"]:
                 config_dict["webdriver_type"] = CONST_WEBDRIVER_TYPE_NODRIVER
 
@@ -556,7 +609,7 @@ class SaveJsonHandler(tornado.web.RequestHandler):
 
         if not is_pass_check:
             self.set_status(401)
-            self.write(dict(error=dict(message=error_message,code=error_code)))
+            self.write(dict(error=dict(message=error_message, code=error_code)))
 
         self.finish()
 
@@ -573,7 +626,7 @@ class SendkeyHandler(tornado.web.RequestHandler):
 
         if is_pass_check:
             is_pass_check = False
-            try :
+            try:
                 _body = json.loads(self.request.body)
                 is_pass_check = True
             except Exception:
@@ -583,6 +636,7 @@ class SendkeyHandler(tornado.web.RequestHandler):
 
         if is_pass_check:
             app_root = util.get_app_root()
+            # 將收到的 Token 存為 .tmp 檔案
             if "token" in _body:
                 tmp_file = _body["token"] + ".tmp"
                 config_filepath = os.path.join(app_root, tmp_file)
@@ -591,6 +645,7 @@ class SendkeyHandler(tornado.web.RequestHandler):
         self.write({"return": True})
 
 class OcrHandler(tornado.web.RequestHandler):
+    """處理 OCR 請求"""
     def get(self):
         self.write({"answer": "1234"})
 
@@ -606,7 +661,7 @@ class OcrHandler(tornado.web.RequestHandler):
 
         if is_pass_check:
             is_pass_check = False
-            try :
+            try:
                 _body = json.loads(self.request.body)
                 is_pass_check = True
             except Exception:
@@ -625,12 +680,13 @@ class OcrHandler(tornado.web.RequestHandler):
                 errorMessage = "image_data not exist"
                 errorCode = 1002
 
-        #print("is_pass_check:", is_pass_check)
-        #print("errorMessage:", errorMessage)
-        #print("errorCode:", errorCode)
+        # print("is_pass_check:", is_pass_check)
+        # print("errorMessage:", errorMessage)
+        # print("errorCode:", errorCode)
         ocr_answer = ""
         if not img_base64 is None:
             try:
+                # 呼叫 ddddocr 進行辨識
                 ocr_answer = self.application.ocr.classification(img_base64)
                 print("ocr_answer:", ocr_answer)
             except Exception as exc:
@@ -640,12 +696,13 @@ class OcrHandler(tornado.web.RequestHandler):
 
 class QueryHandler(tornado.web.RequestHandler):
     def format_config_keyword_for_json(self, user_input):
+        """格式化使用者輸入的關鍵字，轉為 JSON 陣列字串"""
         if len(user_input) > 0:
-            # Remove any existing quotes first
+            # 先移除可能存在的引號
             user_input = user_input.replace('"', '').replace("'", '')
 
-            # Add quotes to each keyword
-            # Use semicolon as the ONLY delimiter (Issue #23)
+            # 加上引號
+            # 使用分號作為唯一的分隔符號 (Issue #23)
             if util.CONST_KEYWORD_DELIMITER in user_input:
                 items = user_input.split(util.CONST_KEYWORD_DELIMITER)
                 user_input = ','.join([f'"{item.strip()}"' for item in items if item.strip()])
@@ -665,10 +722,11 @@ class QueryHandler(tornado.web.RequestHandler):
         except Exception as exc:
             pass
         answer_text_output = self.compose_as_json(answer_text)
-        #print("answer_text_output:", answer_text_output)
+        # print("answer_text_output:", answer_text_output)
         self.write(answer_text_output)
 
 async def main_server():
+    """啟動 Tornado Web Server"""
     ocr = None
     try:
         ocr = ddddocr.DdddOcr(show_ad=False, beta=True)
@@ -686,7 +744,7 @@ async def main_server():
         ("/pause", PauseHandler),
         ("/resume", ResumeHandler),
         ("/run", RunHandler),
-        
+
         # json api
         ("/load", LoadJsonHandler),
         ("/save", SaveJsonHandler),
@@ -695,16 +753,17 @@ async def main_server():
         ("/ocr", OcrHandler),
         ("/query", QueryHandler),
         ("/question", QuestionHandler),
+        # 靜態檔案處理，映射到 www 目錄
         ('/(.*)', NoCacheStaticFileHandler, {"path": os.path.join(SCRIPT_DIR, 'www')}),
     ])
-    app.ocr = ocr;
-    app.version = CONST_APP_VERSION;
+    app.ocr = ocr
+    app.version = CONST_APP_VERSION
 
-    # Get server_port from config, fallback to default (Issue #156)
+    # 從設定檔取得 server_port，若有誤則使用預設值 (Issue #156)
     _, config_dict = load_json()
     server_port = config_dict.get("advanced", {}).get("server_port", CONST_SERVER_PORT)
 
-    # Validate port range
+    # 驗證 Port 範圍
     if not isinstance(server_port, int) or server_port < 1024 or server_port > 65535:
         print(f"[WARNING] Invalid server_port: {server_port}, using default: {CONST_SERVER_PORT}")
         server_port = CONST_SERVER_PORT
@@ -718,7 +777,7 @@ async def main_server():
     await asyncio.Event().wait()
 
 def get_server_port():
-    """Get server port from config file, fallback to default."""
+    """從設定檔取得 server port，失敗則回傳預設值"""
     _, config_dict = load_json()
     server_port = config_dict.get("advanced", {}).get("server_port", CONST_SERVER_PORT)
     if not isinstance(server_port, int) or server_port < 1024 or server_port > 65535:
@@ -726,15 +785,17 @@ def get_server_port():
     return server_port
 
 def web_server():
+    """檢查 Port 是否被佔用，若無則啟動 Server"""
     server_port = get_server_port()
     is_port_binded = util.is_connectable(server_port)
-    #print("is_port_binded:", is_port_binded)
+    # print("is_port_binded:", is_port_binded)
     if not is_port_binded:
         asyncio.run(main_server())
     else:
         print("port:", server_port, " is in used.")
 
 def settgins_gui_timer():
+    """後台 Timer，定期檢查是否需要根據關鍵字自動暫停/恢復"""
     while True:
         change_maxbot_status_by_keyword()
         time.sleep(0.4)
@@ -744,10 +805,12 @@ def settgins_gui_timer():
 if __name__ == "__main__":
     global GLOBAL_SERVER_SHUTDOWN
     GLOBAL_SERVER_SHUTDOWN = False
-    
+
+    # 啟動後台 Timer 執行緒
     threading.Thread(target=settgins_gui_timer, daemon=True).start()
+    # 啟動 Web Server 執行緒
     threading.Thread(target=web_server, daemon=True).start()
-    
+
     clean_tmp_file()
     clean_extension_status()
 
