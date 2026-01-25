@@ -544,7 +544,7 @@ class SaveJsonHandler(tornado.web.RequestHandler):
                     # min value is 15 seconds.
                     config_dict["kktix"]["max_dwell_time"] = 15
 
-            if config_dict["advanced"]["reset_browser_interval"] > 0:
+            if (config_dict["advanced"]["reset_browser_interval"] or 0) > 0:
                 if config_dict["advanced"]["reset_browser_interval"] < 20:
                     # min value is 20 seconds.
                     config_dict["advanced"]["reset_browser_interval"] = 20

@@ -11762,7 +11762,7 @@ def main(args):
         sendkey_to_browser(driver, config_dict)
 
         # default is 0, not reset.
-        if config_dict["advanced"]["reset_browser_interval"] > 0:
+        if ( config_dict["advanced"]["reset_browser_interval"] or 0 ) > 0:
             maxbot_running_time = time.time() - maxbot_last_reset_time
             if maxbot_running_time > config_dict["advanced"]["reset_browser_interval"]:
                 driver = reset_webdriver(driver, config_dict, url)
