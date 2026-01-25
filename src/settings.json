@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-    "homepage": "https://kktix.com",
-=======
     "homepage": "https://ticketplus.com.tw",
->>>>>>> bf6aa68 (compare None > 0)
     "browser": "chrome",
     "language": "English",
     "ticket_number": 2,
@@ -15,11 +11,7 @@
         "image_source": "canvas",
         "path": ""
     },
-<<<<<<< HEAD
-    "webdriver_type": "nodriver",
-=======
     "webdriver_type": "undetected_chromedriver",
->>>>>>> bf6aa68 (compare None > 0)
     "date_auto_select": {
         "enable": true,
         "date_keyword": "",
@@ -27,17 +19,10 @@
     },
     "area_auto_select": {
         "enable": true,
-<<<<<<< HEAD
-        "mode": "center",
-        "area_keyword": ""
-    },
-    "keyword_exclude": "\"\u8f2a\u6905\",\"\u8eab\u969c\",\"\u8eab\u5fc3\",\"\u969c\u7919\",\"Restricted View\",\"\u71c8\u67f1\u906e\u853d\",\"\u8996\u7dda\u4e0d\u5b8c\u6574\",\"\u611b\u5fc3\"",
-=======
         "mode": "from top to bottom",
         "area_keyword": ""
     },
     "keyword_exclude": "\"\u8f2a\u6905\",\"\u8eab\u969c\",\"\u8eab\u5fc3\",\"\u969c\u7919\",\"Restricted View\",\"\u71c8\u67f1\u906e\u853d\",\"\u8996\u7dda\u4e0d\u5b8c\u6574\"",
->>>>>>> bf6aa68 (compare None > 0)
     "kktix": {
         "auto_press_next_step_button": true,
         "auto_fill_ticket_number": true,
@@ -48,16 +33,6 @@
         "pass_date_is_sold_out": true,
         "auto_reload_coming_soon_page": true
     },
-<<<<<<< HEAD
-    "advanced": {
-        "play_sound": {
-            "ticket": false,
-            "order": false,
-            "filename": "assets/sounds/ding-dong.wav"
-        },
-        "tixcraft_sid": "",
-        "ibonqware": "",
-=======
     "contact": {
         "real_name": "",
         "phone": "",
@@ -67,7 +42,6 @@
         "tixcraft_sid": "",
         "ibonqware": "",
         "funone_session_cookie": "",
->>>>>>> bf6aa68 (compare None > 0)
         "facebook_account": "",
         "kktix_account": "",
         "fami_account": "",
@@ -88,18 +62,6 @@
         "ticket_password": "",
         "udn_password": "",
         "ticketplus_password": "",
-<<<<<<< HEAD
-        "facebook_password_plaintext": "",
-        "kktix_password_plaintext": "",
-        "fami_password_plaintext": "",
-        "urbtix_password_plaintext": "",
-        "cityline_password_plaintext": "",
-        "hkticketing_password_plaintext": "",
-        "kham_password_plaintext": "",
-        "ticket_password_plaintext": "",
-        "udn_password_plaintext": "",
-        "ticketplus_password_plaintext": "",
-=======
         "discount_code": ""
     },
     "advanced": {
@@ -108,7 +70,6 @@
             "order": false,
             "filename": "assets/sounds/ding-dong.wav"
         },
->>>>>>> bf6aa68 (compare None > 0)
         "chrome_extension": false,
         "disable_adjacent_seat": true,
         "hide_some_image": true,
@@ -122,32 +83,15 @@
         "auto_reload_page_interval": 0.1,
         "auto_reload_overheat_count": 4,
         "auto_reload_overheat_cd": 1,
-<<<<<<< HEAD
-        "reset_browser_interval": 0,
-=======
         "reset_browser_interval": null,
->>>>>>> bf6aa68 (compare None > 0)
         "proxy_server_port": "",
         "window_size": "",
         "idle_keyword": "",
         "resume_keyword": "",
         "idle_keyword_second": "",
         "resume_keyword_second": "",
-<<<<<<< HEAD
-        "discord_webhook_url": "",
-        "discount_code": ""
-    },
-    "date_auto_fallback": true,
-    "area_auto_fallback": true,
-    "contact": {
-        "real_name": "",
-        "phone": "",
-        "credit_card_prefix": ""
-    }
-=======
         "discord_webhook_url": ""
     },
     "date_auto_fallback": true,
     "area_auto_fallback": true
->>>>>>> bf6aa68 (compare None > 0)
 }
