@@ -16,6 +16,7 @@ import threading
 import time
 import warnings
 import webbrowser
+import traceback
 from datetime import datetime
 
 # 強制使用 UTF-8 編碼輸出（解決 Windows CP950 編碼問題）
@@ -512,22 +513,16 @@ async def nodriver_kktix_signin(tab, url, config_dict):
 
     show_debug_message = util.get_debug_mode(config_dict)
 
-    if show_debug_message:
-        print("nodriver_kktix_signin:", url)
-
-    # 解析 back_to 參數取得真正的目標頁面
-    import urllib.parse
-    target_url = config_dict["homepage"]  # 預設值
+    # 解析 back_to 參數
+    target_url = config_dict["homepage"]
     try:
         parsed_url = urllib.parse.urlparse(url)
         params = urllib.parse.parse_qs(parsed_url.query)
         if 'back_to' in params and len(params['back_to']) > 0:
             target_url = params['back_to'][0]
-    except Exception as exc:
-        print(f"解析 back_to 參數失敗: {exc}")
-
-    # for like human.
-    await asyncio.sleep(random.uniform(1, 3))
+    except Exception as e:
+        if show_debug_message:
+            print(f"[KKTIX] Failed to parse back_to URL: {e}")
 
     kktix_account = config_dict["advanced"]["kktix_account"]
     kktix_password = config_dict["advanced"]["kktix_password_plaintext"].strip()
@@ -540,66 +535,48 @@ async def nodriver_kktix_signin(tab, url, config_dict):
             account = await tab.query_selector("#user_login")
             if account:
                 await account.send_keys(kktix_account)
-                await asyncio.sleep(random.uniform(0.3, 1.2))
+                # [修改] 移除打字延遲 await asyncio.sleep(0.01)
 
             password = await tab.query_selector("#user_password")
             if password:
                 await password.send_keys(kktix_password)
-                await asyncio.sleep(random.uniform(0.3, 1.2))
+                # [修改] 移除打字延遲 await asyncio.sleep(0.01)
 
             await tab.evaluate('''
                 const loginBtn = document.querySelector('input[type="submit"][value="登入"]');
-                if (loginBtn) {
-                    loginBtn.click();
-                }
+                if (loginBtn) loginBtn.click();
             ''')
 
-            # Smart polling: wait for login completion (URL change from sign_in page)
+            # [修改] 加快輪詢頻率 0.3 -> 0.05
             max_wait = 10
-            check_interval = 0.3
+            check_interval = 0.05
             max_attempts = int(max_wait / check_interval)
-            login_completed = False
 
             for attempt in range(max_attempts):
-                # 登入後檢查暫停
-                if await check_and_handle_pause(config_dict):
-                    return False
-
+                if await check_and_handle_pause(config_dict): return False
                 try:
                     current_url = await tab.evaluate('window.location.href')
-
-                    # Detect if left sign_in page (login completed)
                     if '/users/sign_in' not in current_url:
-                        login_completed = True
-                        if show_debug_message:
-                            print(f"[KKTIX SIGNIN] Login completed after {attempt * check_interval:.1f}s, redirected to: {current_url}")
                         break
-                except Exception as exc:
-                    if show_debug_message and attempt == max_attempts - 1:
-                        print(f"[KKTIX SIGNIN] Error checking URL: {exc}")
-
+                except Exception:
+                    if show_debug_message:
+                        
+                        traceback.print_exc()
                 if attempt < max_attempts - 1:
                     await asyncio.sleep(check_interval)
 
-            if not login_completed:
-                if show_debug_message:
-                    print(f"[KKTIX SIGNIN] Login timeout after {max_wait}s")
-
-            # Check if need to manually redirect to back_to URL
+            # Check if need to manually redirect
             try:
                 current_url = await tab.evaluate('window.location.href')
                 if current_url and ('kktix.com/' in current_url or 'kktix.cc/' in current_url):
-                    # If on homepage or user page, manually redirect to back_to URL
                     if (current_url.endswith('/') or '/users/' in current_url) and target_url != current_url:
-                        if show_debug_message:
-                            print(f"[KKTIX SIGNIN] Currently on homepage/user page, redirecting to: {target_url}")
                         await tab.get(target_url)
-                        await asyncio.sleep(random.uniform(1.2, 2.3))
+                        # [修改] 縮短跳轉後等待 1.2~2.3 -> 0.2
+                        await asyncio.sleep(0.2)
                         has_redirected = True
-                    elif show_debug_message:
-                        print(f"[KKTIX SIGNIN] Already on target page: {current_url}")
-            except Exception as redirect_error:
-                print(f"跳轉失敗: {redirect_error}")
+            except Exception:
+                if show_debug_message:
+                    traceback.print_exc()
 
         except Exception as e:
             print(e)
@@ -622,10 +599,9 @@ async def nodriver_kktix_paused_main(tab, url, config_dict):
 async def nodriver_goto_homepage(driver, config_dict):
     homepage = config_dict["homepage"]
     if 'kktix.c' in homepage:
-        # for like human.
         try:
             tab = await driver.get(homepage)
-            await asyncio.sleep(random.uniform(1.0, 2.5))
+            await asyncio.sleep(0.01)
         except Exception as e:
             pass
         
@@ -674,7 +650,7 @@ async def nodriver_goto_homepage(driver, config_dict):
 
     try:
         tab = await driver.get(homepage)
-        await asyncio.sleep(random.uniform(1.0, 2.5))
+        await asyncio.sleep(0.01)
     except Exception as e:
         pass
 
@@ -765,7 +741,7 @@ async def nodriver_goto_homepage(driver, config_dict):
             except Exception as e:
                 if util.get_debug_mode(config_dict):
                     print(f"Error setting TixCraft {cookie_name} cookie: {str(e)}")
-                    import traceback
+                    
                     traceback.print_exc()
                     print("Falling back to old method...")
 
@@ -1258,11 +1234,11 @@ async def nodriver_kktix_assign_ticket_number(tab, config_dict, kktix_area_keywo
 
 
 async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsNewApp_div):
-    """增強版驗證碼處理，包含重試機制和人類化延遲"""
+    """極速版驗證碼處理：移除所有人類模擬延遲"""
     show_debug_message = util.get_debug_mode(config_dict)
 
     answer_list = []
-    success = False  # 初始化按鈕點擊狀態
+    success = False
 
     # 批次檢查頁面元素狀態
     elements_check = await tab.evaluate('''
@@ -1301,55 +1277,32 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
 
             if show_debug_message:
                 print("inferred_answer_string:", inferred_answer_string)
-                print("question_text:", question_text)
-                print("answer_list:", answer_list)
-                print("fail_list:", fail_list)
 
-            # 增強版答案填寫流程，包含重試機制
+            # 極速版答案填寫流程
             if len(inferred_answer_string) > 0 and elements_check.get('hasInput'):
                 success = False
                 max_retries = 3
 
                 for retry_count in range(max_retries):
-                    if show_debug_message and retry_count > 0:
-                        print(f"Captcha filling retry {retry_count}/{max_retries}")
-
                     try:
-                        # 人類化延遲：0.3-1秒隨機延遲
-                        human_delay = random.uniform(0.3, 1.0)
-                        await tab.sleep(human_delay)
+                        # [修改] 移除人類化隨機延遲 await tab.sleep(random.uniform(0.3, 1.0))
+                        # 改為極短緩衝
+                        await tab.sleep(0.01)
 
                         # 填寫驗證碼答案
                         fill_result = await tab.evaluate(f'''
                             (function() {{
                                 const input = document.querySelector('div.custom-captcha-inner > div > div > input');
-                                if (!input) {{
-                                    return {{ success: false, error: "Input not found" }};
-                                }}
+                                if (!input) return {{ success: false, error: "Input not found" }};
+                                if (input.disabled || input.readOnly) return {{ success: false, error: "Input disabled" }};
 
-                                // 確保輸入框可見和可用
-                                if (input.disabled || input.readOnly) {{
-                                    return {{ success: false, error: "Input is disabled or readonly" }};
-                                }}
-
-                                // 模擬人類打字
                                 input.focus();
-                                input.value = "";
-
-                                const answer = "{inferred_answer_string}";
-                                for (let i = 0; i < answer.length; i++) {{
-                                    input.value += answer[i];
-                                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                }}
-
+                                input.value = "{inferred_answer_string}";
+                                input.dispatchEvent(new Event('input', {{ bubbles: true }}));
                                 input.dispatchEvent(new Event('change', {{ bubbles: true }}));
                                 input.blur();
 
-                                return {{
-                                    success: true,
-                                    value: input.value,
-                                    focused: document.activeElement === input
-                                }};
+                                return {{ success: true, value: input.value }};
                             }})();
                         ''')
 
@@ -1357,42 +1310,30 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
 
                         if fill_result and fill_result.get('success'):
                             if show_debug_message:
-                                print(f"Captcha answer filled successfully: {inferred_answer_string}")
+                                print(f"Captcha filled: {inferred_answer_string}")
 
-                            # 短暫延遲後點擊按鈕
-                            button_delay = random.uniform(0.5, 1.2)
-                            await tab.sleep(button_delay)
+                            # [修改] 移除按鈕前延遲 button_delay = 0.05 -> 0.01
+                            await tab.sleep(0.01)
 
                             # 點擊下一步按鈕
                             button_click_success = await nodriver_kktix_press_next_button(tab, config_dict)
 
                             if button_click_success:
                                 success = True
-                                # 最終延遲
-                                final_delay = random.uniform(0.75, 1.5)
-                                await tab.sleep(final_delay)
-
+                                # [修改] 移除提交後的大延遲 final_delay = random.uniform(0.75, 1.5)
                                 fail_list.append(inferred_answer_string)
                                 break
                             else:
                                 if show_debug_message:
                                     print("Button click failed, retrying...")
-                        else:
-                            error_msg = fill_result.get('error', 'Unknown error') if fill_result else 'No result'
-                            if show_debug_message:
-                                print(f"Input filling failed: {error_msg}")
-
+                        
                     except Exception as exc:
                         if show_debug_message:
                             print(f"Captcha retry {retry_count + 1} failed: {exc}")
 
-                    # 重試前的等待
+                    # [修改] 縮短重試間隔
                     if not success and retry_count < max_retries - 1:
-                        retry_delay = random.uniform(0.8, 1.5)
-                        await tab.sleep(retry_delay)
-
-                if not success and show_debug_message:
-                    print("All captcha filling attempts failed")
+                        await tab.sleep(0.1)
 
     return fail_list, is_question_popup, success
 
@@ -1526,7 +1467,7 @@ async def nodriver_kktix_date_auto_select(tab, config_dict):
     # Check if multi-session page exists with smart polling
     session_list = None
     max_wait = 5
-    check_interval = 0.3
+    check_interval = 0.05
     max_attempts = int(max_wait / check_interval)
 
     for attempt in range(max_attempts):
@@ -1852,7 +1793,7 @@ async def nodriver_kktix_press_next_button(tab, config_dict=None):
         try:
             # 如果不是第一次嘗試，等待一下
             if retry_count > 0:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.05)
                 if show_debug_message:
                     print(f"KKTIX 按鈕點擊重試 {retry_count + 1}/3")
 
@@ -2964,8 +2905,8 @@ async def nodriver_kktix_order_member_code(tab, config_dict):
         # 轉義 JavaScript 字串，避免注入攻擊
         escaped_member_code = member_code.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r")
 
-        # 人類化延遲（隨機 100-300ms）
-        await tab.sleep(random.uniform(0.1, 0.3))
+        # 極短緩衝（10ms）
+        await tab.sleep(0.01)
 
         # 使用 JavaScript 注入填入會員序號
         result = await tab.evaluate(f'''
@@ -3591,13 +3532,13 @@ async def nodriver_ticketmaster_date_auto_select(tab, config_dict):
             area_list = await tab.query_selector_all('#gameList tbody tr')
             if area_list and len(area_list) > 0:
                 if show_debug_message:
-                    print(f"[TICKETMASTER DATE] Found date list after {attempt * 0.5}s")
+                    print(f"[TICKETMASTER DATE] Found date list after {attempt * 0.05}s")
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.05)
         except Exception as exc:
             if show_debug_message and attempt == 0:
                 print(f"[TICKETMASTER DATE] Waiting for date list to load... ({exc})")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.05)
 
     if not area_list:
         if show_debug_message:
@@ -6476,7 +6417,7 @@ async def nodriver_ticketplus_account_sign_in(tab, config_dict):
                 await el_password.click()
                 await el_password.apply('function (element) {element.value = ""; } ')
                 await el_password.send_keys(ticketplus_password);
-                await asyncio.sleep(random.uniform(0.1, 0.3))
+                await asyncio.sleep(0.01)
                 is_filled_form = True
 
                 if country_code=="+886":
@@ -7370,7 +7311,7 @@ async def nodriver_ticketplus_unified_select(tab, config_dict, area_keyword):
 
     except Exception as exc:
         if show_debug_message:
-            import traceback
+            
             print(f"Unified selector exception error: {exc}")
             print(f"Exception type: {type(exc).__name__}")
             print(f"Traceback: {traceback.format_exc()}")
@@ -8413,117 +8354,61 @@ async def nodriver_ibon_login(tab, config_dict, driver):
     except Exception as cookie_error:
         print(f"Failed to set ibon cookie (NoDriver): {cookie_error}")
         if show_debug_message:
-            import traceback
+            
             traceback.print_exc()
         return {'success': False, 'reason': 'exception', 'error': str(cookie_error)}
 
 async def nodriver_fami_login(tab, config_dict, show_debug_message=True):
-    """
-    FamiTicket 帳號密碼登入
-
-    參考：chrome_tixcraft.py line 6308 (fami_login)
-    對應規格：FR-001, FR-002, FR-003, FR-004
-
-    Args:
-        tab: NoDriver tab 物件
-        config_dict: 設定字典
-        show_debug_message: 是否顯示除錯訊息
-
-    Returns:
-        bool: 登入成功返回 True，失敗返回 False
-    """
+    """極速版 FamiTicket 登入"""
     if config_dict["advanced"].get("verbose", False):
         show_debug_message = True
 
-    # 讀取帳號密碼（優先使用明碼，若為空則解密）
     fami_account = config_dict["advanced"].get("fami_account", "").strip()
     fami_password = config_dict["advanced"].get("fami_password_plaintext", "").strip()
     if fami_password == "":
         fami_password = util.decryptMe(config_dict["advanced"].get("fami_password", ""))
 
-    if len(fami_account) < 4:
-        if show_debug_message:
-            print("[FAMI LOGIN] Account is empty or too short")
+    if len(fami_account) < 4 or len(fami_password) == 0:
         return False
-
-    if len(fami_password) == 0:
-        if show_debug_message:
-            print("[FAMI LOGIN] Password is empty")
-        return False
-
-    if show_debug_message:
-        print(f"[FAMI LOGIN] Attempting login with account: {fami_account[:3]}***")
 
     is_login_success = False
 
     try:
-        import random
-
-        # 進入登入頁面後隨機等待 0.8-1.2 秒
-        await asyncio.sleep(random.uniform(0.8, 1.2))
-
-        # 記錄當前 URL
+        # [修改] 移除進入頁面後的隨機等待
         original_url = tab.url if hasattr(tab, 'url') else str(tab.target.url)
 
-        # 檢查帳號欄位是否已有值
+        # 填寫帳號
         inputed_text = await tab.evaluate('document.querySelector("#usr_act").value')
-        if not inputed_text or len(inputed_text) == 0:
-            # 使用 NoDriver 原生 send_keys
+        if not inputed_text:
             account_elem = await tab.query_selector('#usr_act')
             if account_elem:
                 await account_elem.click()
-                await asyncio.sleep(random.uniform(0.1, 0.2))
                 await account_elem.send_keys(fami_account)
-                if show_debug_message:
-                    print("[FAMI LOGIN] Account filled")
-                await asyncio.sleep(random.uniform(0.3, 0.5))
-        elif inputed_text == fami_account:
-            if show_debug_message:
-                print("[FAMI LOGIN] Account already correct")
-        else:
-            if show_debug_message:
-                print(f"[FAMI LOGIN] Account has different value: {inputed_text[:10]}...")
+                # [修改] 移除所有隨機等待
 
-        # 檢查密碼欄位是否已有值
+        # 填寫密碼
         inputed_pwd = await tab.evaluate('document.querySelector("#usr_pwd").value')
-        if not inputed_pwd or len(inputed_pwd) == 0:
-            # 使用 NoDriver 原生 send_keys
+        if not inputed_pwd:
             password_elem = await tab.query_selector('#usr_pwd')
             if password_elem:
                 await password_elem.click()
-                await asyncio.sleep(random.uniform(0.1, 0.2))
                 await password_elem.send_keys(fami_password)
-                if show_debug_message:
-                    print(f"[FAMI LOGIN] Password filled (length: {len(fami_password)})")
-                await asyncio.sleep(random.uniform(0.3, 0.5))
+                # [修改] 移除所有隨機等待
 
-                # Debug: 檢查實際輸入的值
-                actual_pwd = await tab.evaluate('document.querySelector("#usr_pwd").value')
-                if show_debug_message:
-                    print(f"[FAMI LOGIN] Actual password length in field: {len(actual_pwd) if actual_pwd else 0}")
-        else:
-            if show_debug_message:
-                print("[FAMI LOGIN] Password already filled")
-
-        # 點擊登入按鈕
+        # 點擊登入
         login_btn = await tab.query_selector('button#btnLogin')
         if login_btn:
             await login_btn.click()
             if show_debug_message:
-                print("[FAMI LOGIN] Login button clicked, waiting for URL change...")
+                print("[FAMI LOGIN] Clicked login")
 
-            # 等待 URL 變化（最多 10 秒）
-            for _ in range(20):
-                await asyncio.sleep(0.5)
+            # 等待 URL 變化
+            for _ in range(40): # 2秒內檢查完
+                await asyncio.sleep(0.05)
                 current_url = tab.url if hasattr(tab, 'url') else str(tab.target.url)
                 if current_url != original_url:
                     is_login_success = True
-                    if show_debug_message:
-                        print(f"[FAMI LOGIN] URL changed to: {current_url[:50]}...")
                     break
-            else:
-                if show_debug_message:
-                    print("[FAMI LOGIN] URL did not change after 10 seconds")
 
     except Exception as exc:
         if show_debug_message:
@@ -8574,7 +8459,7 @@ async def nodriver_fami_activity(tab, config_dict, show_debug_message=True):
                 print("[FAMI ACTIVITY] Buy button clicked via JS")
             # 等待頁面轉跳到 Sales 頁面
             for _ in range(10):
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.05)
                 current_url = tab.url if hasattr(tab, 'url') else str(tab.target.url)
                 if '/Sales/' in current_url:
                     if show_debug_message:
@@ -8669,7 +8554,7 @@ async def nodriver_fami_verify(tab, config_dict, fail_list=None, show_debug_mess
                 ''')
 
                 # 等待驗證結果
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.05)
 
                 # 檢查是否仍在驗證頁面（表示答案錯誤）
                 still_on_verify = await tab.evaluate('''
@@ -8837,7 +8722,7 @@ async def nodriver_fami_date_auto_select(tab, config_dict, last_activity_url, sh
         # 自動補票邏輯（日期列表為空時）
         if len(formated_area_list) == 0:
             # 可能是 SPA 頁面延遲渲染，再次檢查是否為其他頁面類型
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.05)
 
             # 使用 evaluate 檢查頁面類型，避免 CBOR 問題
             page_type = await tab.evaluate('''
@@ -9232,7 +9117,7 @@ async def nodriver_fami_ticket_select(tab, config_dict, show_debug_message=True)
 
             # 等待頁面轉跳
             for _ in range(10):
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.05)
                 current_url = tab.url if hasattr(tab, 'url') else str(tab.target.url)
                 if '/Order/' in current_url or '/Checkout/' in current_url:
                     if show_debug_message:
@@ -9765,7 +9650,7 @@ async def nodriver_ibon_date_auto_select_pierce(tab, config_dict):
             print(f"[IBON DATE PIERCE] Click result: {result}")
             print("[IBON DATE PIERCE] Button clicked successfully")
 
-        await tab.sleep(0.5)
+        await tab.sleep(0.05)
         return True
 
     except Exception as e:
@@ -10137,7 +10022,7 @@ async def nodriver_ibon_date_auto_select_domsnapshot(tab, config_dict):
             if show_debug_message:
                 print("[IBON DATE] Purchase button clicked successfully")
             is_date_assigned = True
-            await tab.sleep(0.5)
+            await tab.sleep(0.05)
         else:
             if show_debug_message:
                 print("[IBON DATE] Click failed")
@@ -10415,7 +10300,7 @@ async def nodriver_ibon_event_area_auto_select(tab, config_dict, area_keyword_it
     except Exception as exc:
         if show_debug_message:
             print(f"[NEW EVENT ERROR] Failed to extract area data: {exc}")
-            import traceback
+            
             traceback.print_exc()
         return True, False
 
@@ -10648,13 +10533,13 @@ async def nodriver_ibon_event_area_auto_select(tab, config_dict, area_keyword_it
         except Exception as resolve_exc:
             if show_debug_message:
                 print(f"[NEW EVENT CDP CLICK] Resolve/click failed: {resolve_exc}")
-                import traceback
+                
                 traceback.print_exc()
 
     except Exception as exc:
         if show_debug_message:
             print(f"[NEW EVENT ERROR] Exception during click: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_need_refresh, is_price_assign_by_bot
@@ -10716,7 +10601,7 @@ async def nodriver_ibon_area_auto_select(tab, config_dict, area_keyword_item="")
         try:
             import time as time_module
             cloudflare_max_wait = 15  # Maximum wait for Cloudflare (seconds)
-            cloudflare_check_interval = 0.5  # Check interval (seconds)
+            cloudflare_check_interval = 0.05  # Check interval (seconds)
             cloudflare_start_time = time_module.time()
             cloudflare_detected_once = False
             page_type_result = "area"
@@ -11041,7 +10926,7 @@ async def nodriver_ibon_area_auto_select(tab, config_dict, area_keyword_item="")
     except Exception as exc:
         if show_debug_message:
             print(f"[ERROR] Failed to extract area data: {exc}")
-            import traceback
+            
             traceback.print_exc()
         return True, False
 
@@ -11256,13 +11141,13 @@ async def nodriver_ibon_area_auto_select(tab, config_dict, area_keyword_item="")
             except Exception as resolve_exc:
                 if show_debug_message:
                     print(f"[CDP CLICK] Resolve/click failed: {resolve_exc}")
-                    import traceback
+                    
                     traceback.print_exc()
 
     except Exception as exc:
         if show_debug_message:
             print(f"[CLICK ERROR] Exception during click: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_need_refresh, is_price_assign_by_bot
@@ -11572,7 +11457,7 @@ async def nodriver_ibon_ticket_number_auto_select(tab, config_dict):
     except Exception as exc:
         if show_debug_message:
             print(f"[TICKET ERROR] Exception: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_ticket_number_assigned
@@ -11759,13 +11644,13 @@ async def nodriver_ibon_get_captcha_image_from_shadow_dom(tab, config_dict):
         except Exception as exc:
             if show_debug_message:
                 print(f"[CAPTCHA] Screenshot failed: {exc}")
-                import traceback
+                
                 traceback.print_exc()
 
     except Exception as exc:
         if show_debug_message:
             print(f"[CAPTCHA ERROR] Exception: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return img_base64
@@ -12015,7 +11900,7 @@ async def nodriver_ibon_keyin_captcha_code(tab, answer="", auto_submit=False, co
     except Exception as exc:
         if show_debug_message:
             print(f"[CAPTCHA INPUT ERROR] Exception: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_verifyCode_editing, is_form_submitted
@@ -12375,7 +12260,7 @@ async def nodriver_ibon_purchase_button_press(tab, config_dict):
     except Exception as exc:
         if show_debug_message:
             print(f"[IBON PURCHASE ERROR] {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_button_clicked
@@ -13169,7 +13054,7 @@ async def nodriver_tour_ibon_options(tab, config_dict):
                 print(f"[TOUR IBON] Add to cart error: {e}")
 
         # Step 3: Wait and click "確認付款方式" button
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
 
         try:
             result = await tab.evaluate('''
@@ -13282,7 +13167,7 @@ async def nodriver_tour_ibon_checkout(tab, config_dict):
                 print(f"[TOUR IBON] Form fill error: {e}")
 
         # Step 2: Check agreement checkbox (wait for form validation first)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
 
         try:
             result = await tab.evaluate('''
@@ -13311,7 +13196,7 @@ async def nodriver_tour_ibon_checkout(tab, config_dict):
                 print(f"[TOUR IBON] Checkbox error: {e}")
 
         # Step 3: Click submit button (下一步) - wait for validation to complete
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
 
         try:
             result = await tab.evaluate('''
@@ -14965,7 +14850,7 @@ async def nodriver_cityline_press_buy_button(tab, config_dict):
 
     # Polling parameters
     max_wait = 10  # Maximum 10 seconds wait
-    check_interval = 0.5  # Check every 0.5 seconds
+    check_interval = 0.05
     max_attempts = int(max_wait / check_interval)
     button_found = False
 
@@ -15122,7 +15007,7 @@ async def nodriver_cityline_main(tab, url, config_dict):
                 print(f"[CITYLINE LOGIN] Redirecting to target page: {target_url}")
             try:
                 await tab.get(target_url)
-                await asyncio.sleep(random.uniform(1.5, 2.5))
+                await asyncio.sleep(0.1)
                 # Update URL after redirect
                 url = await tab.evaluate('window.location.href')
             except Exception as exc:
@@ -15486,7 +15371,7 @@ async def nodriver_kham_check_realname_dialog(tab, config_dict):
                     is_realname_dialog_found = True
 
                     # Wait for dialog to close (jQuery UI dialog animation)
-                    await tab.sleep(0.5)
+                    await tab.sleep(0.05)
 
                     # Verify dialog is closed to prevent infinite loop
                     try:
@@ -15891,7 +15776,7 @@ async def nodriver_kham_date_auto_select(tab, domain_name, config_dict):
                     await tab.sleep(1.0)  # Default 1 second delay
 
                 await tab.reload()
-                await tab.sleep(0.5)  # Wait for page to start loading
+                await tab.sleep(0.05)  # Wait for page to start loading
 
                 if show_debug_message:
                     print("Page reloaded, waiting for content...")
@@ -16004,7 +15889,7 @@ async def nodriver_kham_keyin_captcha_code(tab, answer="", auto_submit=False):
                 print("[AUTO SUBMIT] Submit button not found (selector: input[id$=\"AddShopingCart\"])")
         except Exception as exc:
             print(f"[AUTO SUBMIT] Error: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_verifyCode_editing
@@ -16182,7 +16067,7 @@ async def nodriver_kham_area_auto_select(tab, domain_name, config_dict, area_key
                         ''')
 
                         # Wait for dropdown to open
-                        await tab.sleep(0.5)
+                        await tab.sleep(0.05)
 
                         if show_debug_message:
                             print(f"Dropdown opened, looking for option: {target_text}")
@@ -16735,7 +16620,7 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
 
                         # Trigger login dialog
                         await tab.evaluate('if(typeof doLoginRWD === "function") doLoginRWD();')
-                        await tab.sleep(0.5)
+                        await tab.sleep(0.05)
 
                         # Fill account
                         try:
@@ -17027,7 +16912,7 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
 
                     # Trigger login dialog
                     await tab.evaluate('if(typeof doLoginRWD === "function") doLoginRWD();')
-                    await tab.sleep(0.5)
+                    await tab.sleep(0.05)
 
                     # Fill account
                     try:
@@ -17163,7 +17048,7 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                     # After area selection, seat map may appear on the same page
                     # Check for seat map and perform seat selection if available
                     if is_price_assign_by_bot:
-                        await tab.sleep(0.5)  # Wait for seat map to load
+                        await tab.sleep(0.05)  # Wait for seat map to load
                         is_seat_success = await nodriver_udn_seat_main(tab, config_dict)
                         if show_debug_message:
                             print(f"[UDN SEAT] Seat selection result: {is_seat_success}")
@@ -17477,8 +17362,8 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                         ticket_number = config_dict.get("ticket_number", 2)
                         lightbox_found = False
 
-                        for retry in range(5):  # Retry up to 5 times (total 2.5s max)
-                            await tab.sleep(0.5)
+                        for retry in range(50):  # Retry up to 50 times (total 2.5s max)
+                            await tab.sleep(0.05)
 
                             qty_set_raw = await tab.evaluate(f'''
                                 (() => {{
@@ -17528,8 +17413,8 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                                     print("[UDN QUICK BUY] Clicked submit button, waiting for navigation...")
 
                                 # Wait for navigation to checkout page
-                                for nav_wait in range(10):  # Wait up to 5 seconds for navigation
-                                    await tab.sleep(0.5)
+                                for _nav_wait in range(100):  # Wait up to 5 seconds for navigation
+                                    await tab.sleep(0.05)
                                     current_url = str(tab.target.url).lower()
                                     if 'utk0206' in current_url:
                                         if show_debug_message:
@@ -17677,15 +17562,15 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                             # Check and close success dialog (Kham/Ticket.com.tw shows "加入購物車完成" dialog)
                             # Wait up to 5 seconds for dialog to appear
                             dialog_closed = False
-                            for i in range(10):  # 10 attempts * 0.5s = 5 seconds (increased from 3s)
-                                await tab.sleep(0.5)
+                            for i in range(100):  # 100 attempts * 0.05s = 5 seconds (increased from 3s)
+                                await tab.sleep(0.05)
                                 try:
                                     dialog_btn = await tab.query_selector('div.ui-dialog-buttonset > button[type="button"]')
                                     if dialog_btn:
                                         if show_debug_message:
                                             print("[SUBMIT] Success dialog found, closing...")
                                         await dialog_btn.click()
-                                        await tab.sleep(0.5)  # Wait for dialog close animation
+                                        await tab.sleep(0.05)  # Wait for dialog close animation
                                         dialog_closed = True
                                         if show_debug_message:
                                             print("[SUBMIT] Dialog closed successfully")
@@ -17711,10 +17596,11 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
 
                             url_changed = False
                             max_wait_time = 30 if dialog_closed else 5  # 30s if dialog closed, 5s otherwise
-                            max_attempts = int(max_wait_time / 0.5)
+                            check_interval = 0.05
+                            max_attempts = int(max_wait_time / check_interval)
 
                             for i in range(max_attempts):
-                                await tab.sleep(0.5)
+                                await tab.sleep(check_interval)
                                 new_url = tab.target.url
                                 if new_url != current_url:
                                     if show_debug_message:
@@ -18135,15 +18021,15 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                             # Check and close success dialog (Kham/Ticket.com.tw shows "加入購物車完成" dialog)
                             # Wait up to 5 seconds for dialog to appear
                             dialog_closed = False
-                            for i in range(10):  # 10 attempts * 0.5s = 5 seconds (increased from 3s)
-                                await tab.sleep(0.5)
+                            for i in range(100):  # 100 attempts * 0.05s = 5 seconds (increased from 3s)
+                                await tab.sleep(0.05)
                                 try:
                                     dialog_btn = await tab.query_selector('div.ui-dialog-buttonset > button[type="button"]')
                                     if dialog_btn:
                                         if show_debug_message:
                                             print("[SUBMIT] Success dialog found, closing...")
                                         await dialog_btn.click()
-                                        await tab.sleep(0.5)  # Wait for dialog close animation
+                                        await tab.sleep(0.05)  # Wait for dialog close animation
                                         dialog_closed = True
                                         if show_debug_message:
                                             print("[SUBMIT] Dialog closed successfully")
@@ -18169,10 +18055,11 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
 
                             url_changed = False
                             max_wait_time = 30 if dialog_closed else 5  # 30s if dialog closed, 5s otherwise
-                            max_attempts = int(max_wait_time / 0.5)
+                            check_interval = 0.05
+                            max_attempts = int(max_wait_time / check_interval)
 
                             for i in range(max_attempts):
-                                await tab.sleep(0.5)
+                                await tab.sleep(check_interval)
                                 new_url = tab.target.url
                                 if new_url != current_url:
                                     if show_debug_message:
@@ -18198,7 +18085,7 @@ async def nodriver_kham_main(tab, url, config_dict, ocr):
                     except Exception as exc:
                         if show_debug_message:
                             print(f"[SUBMIT] Click chkCart/addShoppingCart button fail: {exc}")
-                            import traceback
+                            
                             traceback.print_exc()
 
         # Login page handling (UTK1306)
@@ -18715,7 +18602,7 @@ async def nodriver_kham_seat_type_auto_select(tab, config_dict, area_keyword_ite
     except Exception as exc:
         if show_debug_message:
             print(f"[ERROR] KHAM seat type selection error: {exc}")
-        import traceback
+        
         if show_debug_message:
             traceback.print_exc()
 
@@ -19083,7 +18970,7 @@ async def nodriver_kham_seat_auto_select(tab, config_dict):
     except Exception as exc:
         if show_debug:
             print(f"[ERROR] KHAM seat selection error: {exc}")
-        import traceback
+        
         if show_debug:
             traceback.print_exc()
 
@@ -19185,8 +19072,8 @@ async def nodriver_kham_seat_main(tab, config_dict, ocr, domain_name):
                 if show_debug:
                     print("[KHAM SUBMIT] Initial wait completed, now checking for dialog...")
 
-                for i in range(16):  # 16 attempts * 0.5s = 8 seconds
-                    await tab.sleep(0.5)
+                for i in range(160):  # 160 attempts * 0.05s = 8 seconds
+                    await tab.sleep(0.05)
                     try:
                         # Use JavaScript to check dialog and close (improved selectors)
                         result = await tab.evaluate('''
@@ -19228,7 +19115,7 @@ async def nodriver_kham_seat_main(tab, config_dict, ocr, domain_name):
                         if dialog_found and dialog_clicked:
                             if show_debug:
                                 print("[KHAM SUBMIT] Dialog found and clicked via JavaScript")
-                            await tab.sleep(0.5)
+                            await tab.sleep(0.05)
 
                             # Verify dialog actually closed (important for stability)
                             verify_result = await tab.evaluate('''
@@ -19276,8 +19163,8 @@ async def nodriver_kham_seat_main(tab, config_dict, ocr, domain_name):
 
                 # Check if URL changed (maximum 15 seconds wait - more generous fallback)
                 url_changed = False
-                for i in range(30):  # 30 attempts * 0.5s = 15 seconds (extended from 10s)
-                    await tab.sleep(0.5)
+                for i in range(300):  # 300 attempts * 0.05s = 15 seconds
+                    await tab.sleep(0.05)
                     new_url = tab.target.url
                     if new_url != current_url:
                         if show_debug:
@@ -19438,7 +19325,7 @@ async def nodriver_udn_seat_auto_select(tab, config_dict):
     except Exception as exc:
         if show_debug:
             print(f"[ERROR] UDN seat selection error: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_seat_assigned
@@ -19543,7 +19430,7 @@ async def nodriver_udn_seat_select_ticket_type(tab, config_dict):
                 print(f"[UDN TICKET] Added to cart: {result.get('ticketType')}")
 
             # Wait for dialog and dismiss it
-            await tab.sleep(0.5)
+            await tab.sleep(0.05)
             try:
                 dialog_result = await tab.evaluate('''
                     (function() {
@@ -19580,7 +19467,7 @@ async def nodriver_udn_seat_select_ticket_type(tab, config_dict):
     except Exception as exc:
         if show_debug:
             print(f"[ERROR] UDN ticket type selection error: {exc}")
-            import traceback
+            
             traceback.print_exc()
 
     return is_success
@@ -19925,7 +19812,7 @@ async def nodriver_ticket_seat_type_auto_select(tab, config_dict, area_keyword_i
                         if show_debug_message and i == 19:
                             print(f"[TICKET SEAT TYPE] querySelector error: {wait_exc}")
 
-                    await tab.sleep(0.5)
+                    await tab.sleep(0.05)
 
                 if not seats_loaded and show_debug_message:
                     print("[TICKET SEAT TYPE] Warning: Seats not fully loaded within 10 seconds")
@@ -19936,13 +19823,13 @@ async def nodriver_ticket_seat_type_auto_select(tab, config_dict, area_keyword_i
         except Exception as click_exc:
             if show_debug_message:
                 print(f"[ERROR] CDP click error: {click_exc}")
-                import traceback
+                
                 traceback.print_exc()
 
     except Exception as exc:
         if show_debug_message:
             print(f"[ERROR] Ticket seat type selection error: {exc}")
-        import traceback
+        
         if show_debug_message:
             traceback.print_exc()
 
@@ -20755,7 +20642,7 @@ async def nodriver_ticket_seat_auto_select(tab, config_dict):
     except Exception as exc:
         if show_debug:
             print(f"[ERROR] Seat selection error: {exc}")
-        import traceback
+        
         if show_debug:
             traceback.print_exc()
 
@@ -20886,15 +20773,15 @@ async def nodriver_ticket_seat_main(tab, config_dict, ocr, domain_name):
                 # Check and close success dialog (year ticket shows "加入購物車完成" dialog)
                 # Wait up to 5 seconds for dialog to appear
                 dialog_closed = False
-                for i in range(10):  # 10 attempts * 0.5s = 5 seconds
-                    await tab.sleep(0.5)
+                for i in range(100):  # 100 attempts * 0.05s = 5 seconds
+                    await tab.sleep(0.05)
                     try:
                         dialog_btn = await tab.query_selector('div.ui-dialog-buttonset > button[type="button"]')
                         if dialog_btn:
                             if show_debug:
                                 print("[TICKET SUBMIT] Success dialog found, closing...")
                             await dialog_btn.click()
-                            await tab.sleep(0.5)  # Wait for dialog close animation
+                            await tab.sleep(0.05)  # Wait for dialog close animation
                             dialog_closed = True
                             if show_debug:
                                 print("[TICKET SUBMIT] Dialog closed successfully")
@@ -20931,7 +20818,7 @@ async def nodriver_ticket_seat_main(tab, config_dict, ocr, domain_name):
         is_seat_taken = await nodriver_ticket_check_seat_taken_dialog(tab, config_dict)
         if is_seat_taken:
             # Seat was taken, retry seat selection
-            await tab.sleep(0.5)
+            await tab.sleep(0.05)
             is_seat_assigned = await nodriver_ticket_seat_auto_select(tab, config_dict)
 
             # Retry captcha if needed
@@ -20972,15 +20859,15 @@ async def nodriver_ticket_seat_main(tab, config_dict, ocr, domain_name):
 
                         # Check and close success dialog (same logic as initial submit)
                         dialog_closed = False
-                        for i in range(10):  # 10 attempts * 0.5s = 5 seconds
-                            await tab.sleep(0.5)
+                        for i in range(100):  # 100 attempts * 0.05s = 5 seconds
+                            await tab.sleep(0.05)
                             try:
                                 dialog_btn = await tab.query_selector('div.ui-dialog-buttonset > button[type="button"]')
                                 if dialog_btn:
                                     if show_debug:
                                         print("[TICKET SUBMIT RETRY] Success dialog found, closing...")
                                     await dialog_btn.click()
-                                    await tab.sleep(0.5)
+                                    await tab.sleep(0.05)
                                     dialog_closed = True
                                     if show_debug:
                                         print("[TICKET SUBMIT RETRY] Dialog closed successfully")
@@ -23061,7 +22948,7 @@ async def nodriver_hkticketing_type02_event_page(tab, config_dict):
     modal_dismissed = await nodriver_hkticketing_type02_dismiss_modal(tab, config_dict)
     if modal_dismissed:
         print("[HKTICKETING TYPE02] Modal dialog dismissed")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
 
     # Step 2: Click buy button
     await asyncio.sleep(0.3)
@@ -23070,7 +22957,7 @@ async def nodriver_hkticketing_type02_event_page(tab, config_dict):
     if is_clicked:
         if show_debug_message:
             print("[HKTICKETING TYPE02] Navigating to ticket selection page...")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
 
     return is_clicked
 
@@ -23739,7 +23626,7 @@ async def nodriver_hkticketing_type02_confirm_order(tab, config_dict):
     except Exception as exc:
         print(f"[HKTICKETING TYPE02] Agree checkbox error: {exc}")
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.05)
 
     # Step 3: Click "同意" button in popup dialog (appears after checkbox click)
     popup_agree_js = '''
@@ -23768,7 +23655,7 @@ async def nodriver_hkticketing_type02_confirm_order(tab, config_dict):
             result = result[0] if isinstance(result[0], dict) else None
         if result and isinstance(result, dict) and result.get('success'):
             print(f"[HKTICKETING TYPE02] Popup agree button clicked: {result.get('text')}")
-            await asyncio.sleep(0.5)  # Wait for popup to close
+            await asyncio.sleep(0.05)  # Wait for popup to close
         else:
             # No popup is normal - it only appears after checkbox click
             pass
@@ -24140,7 +24027,7 @@ async def nodriver_hkticketing_main(tab, url, config_dict):
         login_success = await nodriver_hkticketing_type02_login(tab, config_dict)
         if login_success:
             # Redirect to homepage after successful login
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.05)
             homepage = config_dict.get("homepage", "").strip()
             if homepage and 'hkt.hkticketing.com' in homepage:
                 await tab.get(homepage)
@@ -24600,3 +24487,6 @@ def cli():
 
 if __name__ == "__main__":
     cli()
+
+
+
