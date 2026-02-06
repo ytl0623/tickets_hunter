@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 https://kktix.com/events/kf7ert/registrations/new
+=======
+https://tixcraft.com/login
+>>>>>>> cb517c6c45c2ef5c6603de7b2f37b0e532a3a8fc
