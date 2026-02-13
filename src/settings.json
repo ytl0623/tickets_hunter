@@ -61,7 +61,8 @@
         "kham_password": "",
         "ticket_password": "",
         "udn_password": "",
-        "ticketplus_password": ""
+        "ticketplus_password": "",
+        "fansigo_cookie": ""
     },
     "advanced": {
         "play_sound": {
@@ -90,7 +91,8 @@
         "resume_keyword": "",
         "idle_keyword_second": "",
         "resume_keyword_second": "",
-        "discord_webhook_url": ""
+        "discord_webhook_url": "",
+        "show_timestamp": false
     },
     "date_auto_fallback": true,
     "area_auto_fallback": true
