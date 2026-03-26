@@ -20,11 +20,12 @@ const area_auto_fallback = document.querySelector('#area_auto_fallback');
 const keyword_exclude = document.querySelector('#keyword_exclude');
 
 // advance
-const browser = document.querySelector('#browser');
 const play_ticket_sound = document.querySelector('#play_ticket_sound');
 const play_order_sound = document.querySelector('#play_order_sound');
 const play_sound_filename = document.querySelector('#play_sound_filename');
 const discord_webhook_url = document.querySelector('#discord_webhook_url');
+const telegram_bot_token = document.querySelector('#telegram_bot_token');
+const telegram_chat_id = document.querySelector('#telegram_chat_id');
 
 const auto_press_next_step_button = document.querySelector('#auto_press_next_step_button');
 const max_dwell_time = document.querySelector('#max_dwell_time');
@@ -46,6 +47,7 @@ const show_timestamp = document.querySelector('#show_timestamp');
 const ocr_captcha_enable = document.querySelector('#ocr_captcha_enable');
 const ocr_captcha_image_source = document.querySelector('#ocr_captcha_image_source');
 const ocr_captcha_force_submit = document.querySelector('#ocr_captcha_force_submit');
+const ocr_captcha_use_universal = document.querySelector('#ocr_captcha_use_universal');
 const remote_url = document.querySelector('#remote_url');
 const ocr_model_path = document.querySelector('#ocr_model_path');
 
@@ -64,6 +66,8 @@ const tixcraft_sid = document.querySelector('#tixcraft_sid');
 const ibonqware = document.querySelector('#ibonqware');
 const funone_session_cookie = document.querySelector('#funone_session_cookie');
 const fansigo_cookie = document.querySelector('#fansigo_cookie');
+const fansigo_account = document.querySelector('#fansigo_account');
+const fansigo_password = document.querySelector('#fansigo_password');
 const facebook_account = document.querySelector('#facebook_account');
 const kktix_account = document.querySelector('#kktix_account');
 const fami_account = document.querySelector('#fami_account');
@@ -199,12 +203,13 @@ function load_settins_to_form(settings)
         keyword_exclude.value = format_keyword_for_display(settings.keyword_exclude);
         
         // advanced
-        browser.value = settings.browser;
 
         play_ticket_sound.checked = settings.advanced.play_sound.ticket;
         play_order_sound.checked = settings.advanced.play_sound.order;
         play_sound_filename.value = settings.advanced.play_sound.filename;
         discord_webhook_url.value = settings.advanced.discord_webhook_url || '';
+        telegram_bot_token.value = settings.advanced.telegram_bot_token || '';
+        telegram_chat_id.value = settings.advanced.telegram_chat_id || '';
 
         auto_press_next_step_button.checked = settings.kktix.auto_press_next_step_button;
         max_dwell_time.value = settings.kktix.max_dwell_time;
@@ -227,6 +232,12 @@ function load_settins_to_form(settings)
         ocr_captcha_enable.checked = settings.ocr_captcha.enable;
         ocr_captcha_image_source.value  = settings.ocr_captcha.image_source;
         ocr_captcha_force_submit.checked = settings.ocr_captcha.force_submit;
+
+        if(settings.ocr_captcha.use_universal !== undefined) {
+            ocr_captcha_use_universal.checked = settings.ocr_captcha.use_universal;
+        } else {
+            ocr_captcha_use_universal.checked = true;
+        }
 
         let remote_url_string = "";
         let remote_url_array = [];
@@ -261,6 +272,8 @@ function load_settins_to_form(settings)
         ibonqware.value = settings.accounts.ibonqware;
         funone_session_cookie.value = settings.accounts.funone_session_cookie || '';
         fansigo_cookie.value = settings.accounts.fansigo_cookie || '';
+        fansigo_account.value = settings.accounts.fansigo_account || '';
+        fansigo_password.value = settings.accounts.fansigo_password || '';
         facebook_account.value = settings.accounts.facebook_account;
         kktix_account.value = settings.accounts.kktix_account;
         fami_account.value = settings.accounts.fami_account;
@@ -448,12 +461,12 @@ function save_changes_to_dict(silent_flag)
             settings.keyword_exclude = format_config_keyword_for_json(keyword_exclude.value);
 
             // advanced
-            settings.browser = browser.value;
-
             settings.advanced.play_sound.ticket = play_ticket_sound.checked;
             settings.advanced.play_sound.order = play_order_sound.checked;
             settings.advanced.play_sound.filename = play_sound_filename.value;
             settings.advanced.discord_webhook_url = discord_webhook_url.value;
+            settings.advanced.telegram_bot_token = telegram_bot_token.value;
+            settings.advanced.telegram_chat_id = telegram_chat_id.value;
 
             settings.kktix.auto_press_next_step_button = auto_press_next_step_button.checked;
             settings.kktix.max_dwell_time = parseInt(max_dwell_time.value);
@@ -476,6 +489,7 @@ function save_changes_to_dict(silent_flag)
             settings.ocr_captcha.enable = ocr_captcha_enable.checked;
             settings.ocr_captcha.image_source = ocr_captcha_image_source.value;
             settings.ocr_captcha.force_submit = ocr_captcha_force_submit.checked;
+            settings.ocr_captcha.use_universal = ocr_captcha_use_universal.checked;
 
             let remote_url_array = [];
             remote_url_array.push(remote_url.value);
@@ -508,6 +522,8 @@ function save_changes_to_dict(silent_flag)
             settings.accounts.ibonqware = ibonqware.value;
             settings.accounts.funone_session_cookie = funone_session_cookie.value;
             settings.accounts.fansigo_cookie = fansigo_cookie.value;
+            settings.accounts.fansigo_account = fansigo_account.value;
+            settings.accounts.fansigo_password = fansigo_password.value;
             settings.accounts.facebook_account = facebook_account.value;
             settings.accounts.kktix_account = kktix_account.value;
             settings.accounts.fami_account = fami_account.value;
@@ -616,7 +632,7 @@ function maxbot_save()
 function check_unsaved_fields()
 {
     if(settings) {
-        const field_list_basic = ["homepage","ticket_number","refresh_datetime","browser"];
+        const field_list_basic = ["homepage","ticket_number","refresh_datetime"];
         field_list_basic.forEach(f => {
             const field = document.querySelector('#'+f);
             if(field.value != settings[f]) {
@@ -630,6 +646,8 @@ function check_unsaved_fields()
             "ibonqware",
             "funone_session_cookie",
             "fansigo_cookie",
+            "fansigo_account",
+            "fansigo_password",
             "facebook_account",
             "kktix_account",
             "fami_account",
@@ -818,6 +836,93 @@ onchange_tag_list.forEach((tag) => {
 });
 
 homepage.addEventListener('keyup', check_unsaved_fields);
+
+ocr_captcha_use_universal.addEventListener('change', function() {
+    if (this.checked) {
+        ocr_model_path.value = 'assets/model/universal';
+    } else {
+        ocr_model_path.value = '';
+    }
+});
+
+document.querySelector('#btn_test_discord_webhook').addEventListener('click', function() {
+    const url = discord_webhook_url.value.trim();
+    if (!url) {
+        alert('Please enter Discord Webhook URL first.');
+        return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = '...';
+    $.ajax({
+        url: '/test_discord_webhook',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ webhook_url: url }),
+        dataType: 'json'
+    })
+    .done(function(data) {
+        if (data.success) {
+            btn.className = 'btn btn-outline-success';
+            btn.textContent = 'OK';
+        } else {
+            btn.className = 'btn btn-outline-danger';
+            btn.textContent = 'Failed';
+            alert('Test failed: ' + data.message);
+        }
+    })
+    .fail(function() {
+        btn.className = 'btn btn-outline-danger';
+        btn.textContent = 'Error';
+    })
+    .always(function() {
+        setTimeout(function() {
+            btn.disabled = false;
+            btn.textContent = '\u6E2C\u8A66';
+            btn.className = 'btn btn-outline-secondary';
+        }, 3000);
+    });
+});
+
+document.querySelector('#btn_test_telegram').addEventListener('click', function() {
+    const token = telegram_bot_token.value.trim();
+    const chatId = telegram_chat_id.value.trim();
+    if (!token || !chatId) {
+        alert('Please enter both Telegram Bot Token and Chat ID first.');
+        return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = '...';
+    $.ajax({
+        url: '/test_telegram',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ bot_token: token, chat_id: chatId }),
+        dataType: 'json'
+    })
+    .done(function(data) {
+        if (data.success) {
+            btn.className = 'btn btn-outline-success';
+            btn.textContent = 'OK';
+        } else {
+            btn.className = 'btn btn-outline-danger';
+            btn.textContent = 'Failed';
+            alert('Test failed: ' + data.message);
+        }
+    })
+    .fail(function() {
+        btn.className = 'btn btn-outline-danger';
+        btn.textContent = 'Error';
+    })
+    .always(function() {
+        setTimeout(function() {
+            btn.disabled = false;
+            btn.textContent = '\u6E2C\u8A66';
+            btn.className = 'btn btn-outline-secondary';
+        }, 3000);
+    });
+});
 
 let runMessageClearTimer;
 
@@ -1119,6 +1224,87 @@ if (tixcraft_sid) {
         }
     });
 }
+
+// Help Panel — SVG icon injected from static constant (no user data)
+const HELP_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-info-circle" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/></svg>';
+// Safe: HELP_ICON_SVG is a static developer-authored SVG string, not user input
+document.querySelectorAll('.help-icon').forEach(function(el) { el.innerHTML = HELP_ICON_SVG; });
+let currentHelpField = null;
+let helpOffcanvasInstance = null;
+
+function getHelpOffcanvas() {
+    if (!helpOffcanvasInstance) {
+        const el = document.getElementById('helpPanel');
+        if (!el) return null;
+        helpOffcanvasInstance = new bootstrap.Offcanvas(el);
+        el.addEventListener('hide.bs.offcanvas', () => {
+            currentHelpField = null;
+        });
+    }
+    return helpOffcanvasInstance;
+}
+
+function buildHelpBody(content) {
+    let html = '<div class="mb-3">' + content.detail + '</div>';
+    if (content.faq && content.faq.length > 0) {
+        html += '<div class="accordion accordion-flush" id="helpFaqAccordion">';
+        content.faq.forEach(function(item, i) {
+            html += '<div class="accordion-item">'
+                + '<h2 class="accordion-header">'
+                + '<button class="accordion-button collapsed py-2" type="button"'
+                + ' data-bs-toggle="collapse" data-bs-target="#helpFaq' + i + '"'
+                + ' aria-expanded="false">' + item.q + '</button>'
+                + '</h2>'
+                + '<div id="helpFaq' + i + '" class="accordion-collapse collapse"'
+                + ' data-bs-parent="#helpFaqAccordion">'
+                + '<div class="accordion-body py-2">' + item.a + '</div>'
+                + '</div></div>';
+        });
+        html += '</div>';
+    }
+    return html;
+}
+
+function showHelp(fieldId) {
+    var content = (typeof HELP_CONTENT !== 'undefined') && HELP_CONTENT[fieldId];
+    if (!content) return;
+    if (currentHelpField === fieldId) return;
+
+    var oc = getHelpOffcanvas();
+    if (!oc) return;
+
+    currentHelpField = fieldId;
+    document.getElementById('helpPanelTitle').textContent = content.title;
+    // Safe: buildHelpBody returns static developer-authored HTML from help-content.js, no user input
+    document.getElementById('helpPanelBody').innerHTML = buildHelpBody(content);
+
+    var footer = document.getElementById('helpPanelFooter');
+    var link = document.getElementById('helpPanelLink');
+    if (content.link) {
+        link.href = content.link;
+        footer.style.display = '';
+    } else {
+        footer.style.display = 'none';
+    }
+
+    oc.show();
+}
+
+document.addEventListener('click', function(e) {
+    var icon = e.target.closest('.help-icon');
+    if (icon) {
+        e.preventDefault();
+        e.stopPropagation();
+        showHelp(icon.dataset.help);
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('help-icon')) {
+        e.preventDefault();
+        showHelp(e.target.dataset.help);
+    }
+});
 
 // Clean up when page unloads
 window.addEventListener('beforeunload', () => {

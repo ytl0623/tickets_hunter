@@ -2241,6 +2241,7 @@ def send_discord_webhook(
     if not webhook_url:
         return False
 
+    debug = DebugLogger(enabled=verbose)
     try:
         payload = build_discord_message(stage, platform_name)
         response = requests.post(
@@ -2250,9 +2251,9 @@ def send_discord_webhook(
         )
         # Discord returns 204 No Content on success
         return response.status_code in (200, 204)
-    except Exception as exc:
-        if verbose:
-            print(f"[Discord Webhook] Send failed: {exc}")
+    except (requests.RequestException, ValueError) as exc:
+        safe_msg = str(exc).replace(webhook_url, "***") if webhook_url else str(exc)
+        debug.log(f"[Discord Webhook] Send failed: {safe_msg}")
         return False
 
 
@@ -2283,6 +2284,111 @@ def send_discord_webhook_async(
     thread = threading.Thread(
         target=send_discord_webhook,
         args=(webhook_url, stage, platform_name, timeout, verbose),
+        daemon=True
+    )
+    thread.start()
+
+
+def build_telegram_message(stage: str, platform_name: str) -> str:
+    """
+    Build Telegram notification message text based on stage and platform.
+
+    Args:
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+
+    Returns:
+        str: Message text
+    """
+    if not platform_name:
+        platform_name = "Unknown"
+
+    if stage == "ticket":
+        message = f"[{platform_name}] found ticket! Please check your computer"
+    elif stage == "order":
+        message = f"[{platform_name}] order success! Please checkout and pay ASAP"
+    else:
+        message = f"[{platform_name}] notification"
+
+    return message
+
+
+def send_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    stage: str,
+    platform_name: str,
+    timeout: float = 3.0,
+    verbose: bool = False
+) -> bool:
+    """
+    Send Telegram Bot notification (synchronous).
+
+    Args:
+        bot_token: Telegram Bot API token
+        chat_id: Comma-separated Telegram chat IDs (e.g., "123,456")
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+        timeout: Request timeout in seconds, default 3.0
+        verbose: Whether to print error messages
+
+    Returns:
+        bool: True if sent to at least one chat successfully, False otherwise
+    """
+    if not bot_token or not chat_id:
+        return False
+
+    chat_ids = [cid.strip() for cid in chat_id.split(",") if cid.strip()]
+    if not chat_ids:
+        return False
+
+    text = build_telegram_message(stage, platform_name)
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    debug = DebugLogger(enabled=verbose)
+    any_success = False
+    for cid in chat_ids:
+        try:
+            payload = {"chat_id": cid, "text": text}
+            response = requests.post(url, json=payload, timeout=timeout)
+            result = response.json()
+            if response.status_code == 200 and result.get("ok", False):
+                any_success = True
+            else:
+                desc = result.get("description", "HTTP %d" % response.status_code)
+                debug.log(f"[Telegram] Send to {cid} failed: {desc}")
+        except (requests.RequestException, ValueError) as exc:
+            safe_msg = str(exc).replace(bot_token, "***") if bot_token else str(exc)
+            debug.log(f"[Telegram] Send to {cid} failed: {safe_msg}")
+    return any_success
+
+
+def send_telegram_message_async(
+    bot_token: str,
+    chat_id: str,
+    stage: str,
+    platform_name: str,
+    timeout: float = 3.0,
+    verbose: bool = False
+) -> None:
+    """
+    Send Telegram Bot notification asynchronously.
+
+    Uses a daemon thread to send without blocking the main flow.
+
+    Args:
+        bot_token: Telegram Bot API token
+        chat_id: Comma-separated Telegram chat IDs (e.g., "123,456")
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+        timeout: Request timeout in seconds, default 3.0
+        verbose: Whether to print error messages
+    """
+    if not bot_token or not chat_id:
+        return
+
+    thread = threading.Thread(
+        target=send_telegram_message,
+        args=(bot_token, chat_id, stage, platform_name, timeout, verbose),
         daemon=True
     )
     thread.start()
@@ -2374,3 +2480,131 @@ async def verify_cf_with_templates(tab, templates: list = None, show_debug: bool
     if show_debug:
         print("[CF] All templates failed")
     return False
+
+
+# ============================================================
+# ibon live.map - skip area selection page (fast-path)
+# Ref: docs/13-platform-research/ibon-livemap-optimization.md
+# ============================================================
+
+IBON_LIVEMAP_CDN_BASE = "https://qwareticket-asysimg.azureedge.net/QWARE_TICKET/images/Temp"
+IBON_ORDER_BASE_URL = "https://orders.ibon.com.tw/application/UTK02/"
+
+
+def ibon_fetch_and_parse_livemap(performance_id, debug=None):
+    """Fetch ibon live.map from Azure CDN and parse area data.
+
+    Returns list of area dicts or empty list on failure.
+    Each dict: page_name, performance_id, area_id, group_id,
+               area_name, price (int), remaining (int).
+    """
+    areas = []
+    url = f"{IBON_LIVEMAP_CDN_BASE}/{performance_id}/1_{performance_id}_live.map"
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=3)
+        if resp.status_code != 200:
+            if debug:
+                debug.log(f"[IBON LIVEMAP] HTTP {resp.status_code} for {performance_id}")
+            return areas
+        resp.encoding = 'utf-8'
+        content = resp.text
+    except Exception as exc:
+        if debug:
+            debug.log(f"[IBON LIVEMAP] Request failed: {exc}")
+        return areas
+
+    send_pattern = r"Send\('(\d+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']*)'\)"
+    title_pattern = r'title="[^:]+:([^"]*?)\s+\u7968\u50f9[\uff1a:]([^\s]+)\s+\u5c1a\u9918[\uff1a:](\d+)"'
+
+    for area_match in re.finditer(r'<area[^>]+>', content):
+        area_html = area_match.group()
+        send_match = re.search(send_pattern, area_html)
+        title_match = re.search(title_pattern, area_html)
+        if send_match and title_match:
+            try:
+                price_str = title_match.group(2).replace(',', '')
+                price = int(price_str)
+                remaining = int(title_match.group(3))
+            except (ValueError, IndexError):
+                continue
+
+            areas.append({
+                'page_name': send_match.group(1),
+                'performance_id': send_match.group(2),
+                'area_id': send_match.group(3),
+                'group_id': send_match.group(4),
+                'area_name': title_match.group(1).strip(),
+                'price': price,
+                'remaining': remaining,
+            })
+
+    if debug:
+        debug.log(f"[IBON LIVEMAP] Parsed {len(areas)} areas for {performance_id}")
+
+    return areas
+
+
+def ibon_livemap_select_area(livemap_areas, config_dict, area_keyword_item, debug=None):
+    """Select best area from live.map data based on config filters.
+
+    Applies: remaining >= ticket_number, keyword_exclude, keyword match,
+    then auto_select_mode (top/bottom/center/random).
+
+    Returns selected area dict or None.
+    """
+    ticket_number = config_dict["ticket_number"]
+    auto_select_mode = config_dict["area_auto_select"]["mode"]
+
+    matched = []
+    for area in livemap_areas:
+        area_label = f"{area['area_name']} | price={area['price']} | remaining={area['remaining']}"
+
+        if area['remaining'] < ticket_number:
+            if debug:
+                debug.log(f"[IBON LIVEMAP] {area_label} -> skip: insufficient (need {ticket_number})")
+            continue
+
+        row_text = area['area_name'] + ' ' + str(area['price'])
+
+        if reset_row_text_if_match_keyword_exclude(config_dict, row_text):
+            if debug:
+                debug.log(f"[IBON LIVEMAP] {area_label} -> skip: excluded by keyword")
+            continue
+
+        if area_keyword_item and len(area_keyword_item) > 0:
+            keyword_clean = area_keyword_item.strip()
+            if keyword_clean.startswith('"') and keyword_clean.endswith('"'):
+                keyword_clean = keyword_clean[1:-1]
+
+            sub_keywords = [kw.strip() for kw in keyword_clean.split(' ') if kw.strip()]
+            if not all(sub_kw in row_text for sub_kw in sub_keywords):
+                if debug:
+                    debug.log(f"[IBON LIVEMAP] {area_label} -> skip: keyword mismatch (need: {keyword_clean})")
+                continue
+
+        if debug:
+            debug.log(f"[IBON LIVEMAP] {area_label} -> MATCHED")
+        matched.append(area)
+
+    return get_target_item_from_matched_list(matched, auto_select_mode)
+
+
+def ibon_build_skip_url(area_dict):
+    """Build ibon direct navigation URL from live.map area data.
+
+    Two patterns based on page_name:
+      != '0205' -> UTK{page_name}_.aspx?...
+      == '0205' -> UTK0201_001.aspx?...
+    """
+    page_name = area_dict['page_name']
+    perf_id = area_dict['performance_id']
+    area_id = area_dict['area_id']
+    group_id = area_dict['group_id']
+
+    if page_name != '0205':
+        path = f"UTK{page_name}_.aspx?PERFORMANCE_ID={perf_id}&GROUP_ID={group_id}&PERFORMANCE_PRICE_AREA_ID={area_id}"
+    else:
+        path = f"UTK0201_001.aspx?PERFORMANCE_ID={perf_id}&GROUP_ID={group_id}&PERFORMANCE_PRICE_AREA_ID={area_id}"
+
+    return IBON_ORDER_BASE_URL + path

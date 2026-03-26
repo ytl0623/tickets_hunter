@@ -16,6 +16,7 @@ import tornado
 from tornado.web import Application
 from tornado.web import StaticFileHandler
 
+import requests
 import util
 
 from typing import (
@@ -44,7 +45,7 @@ except Exception as exc:
 # Get script directory for resource paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CONST_APP_VERSION = "TicketsHunter (2026.02.12)"
+CONST_APP_VERSION = "TicketsHunter (2026.03.10)"
 
 CONST_MAXBOT_ANSWER_ONLINE_FILE = "MAXBOT_ONLINE_ANSWER.txt"
 CONST_MAXBOT_CONFIG_FILE = "settings.json"
@@ -110,7 +111,8 @@ def get_default_config():
     config_dict["ocr_captcha"]["beta"] = True
     config_dict["ocr_captcha"]["force_submit"] = True
     config_dict["ocr_captcha"]["image_source"] = CONST_OCR_CAPTCH_IMAGE_SOURCE_CANVAS
-    config_dict["ocr_captcha"]["path"] = ""
+    config_dict["ocr_captcha"]["use_universal"] = True
+    config_dict["ocr_captcha"]["path"] = "assets/model/universal"
     config_dict["webdriver_type"] = CONST_WEBDRIVER_TYPE_NODRIVER
 
     config_dict["date_auto_select"] = {}
@@ -148,6 +150,8 @@ def get_default_config():
     config_dict["accounts"]["ibonqware"] = ""
     config_dict["accounts"]["funone_session_cookie"] = ""
     config_dict["accounts"]["fansigo_cookie"] = ""
+    config_dict["accounts"]["fansigo_account"] = ""
+    config_dict["accounts"]["fansigo_password"] = ""
     config_dict["accounts"]["facebook_account"] = ""
     config_dict["accounts"]["kktix_account"] = ""
     config_dict["accounts"]["fami_account"] = ""
@@ -206,6 +210,10 @@ def get_default_config():
     config_dict["advanced"]["idle_keyword_second"] = ""
     config_dict["advanced"]["resume_keyword_second"] = ""
 
+    config_dict["advanced"]["discord_webhook_url"] = ""
+    config_dict["advanced"]["telegram_bot_token"] = ""
+    config_dict["advanced"]["telegram_chat_id"] = ""
+
     # Keyword priority fallback (Feature 003)
     config_dict["date_auto_fallback"] = False  # default: strict mode (avoid unwanted purchases)
     config_dict["area_auto_fallback"] = False  # default: strict mode (avoid unwanted purchases)
@@ -239,7 +247,7 @@ def migrate_config(config_dict):
 
     # Ensure ocr_captcha.path exists
     if "ocr_captcha" in config_dict and "path" not in config_dict["ocr_captcha"]:
-        config_dict["ocr_captcha"]["path"] = ""
+        config_dict["ocr_captcha"]["path"] = "assets/model/universal"
 
     # Migrate server_port: ensure old config has this field (Issue #156)
     if "advanced" in config_dict:
@@ -562,6 +570,125 @@ class SendkeyHandler(tornado.web.RequestHandler):
 
         self.write({"return": True})
 
+class TestDiscordWebhookHandler(tornado.web.RequestHandler):
+    ALLOWED_HOSTS = ("discord.com", "discordapp.com")
+
+    def post(self):
+        try:
+            body = json.loads(self.request.body)
+        except Exception:
+            self.write({"success": False, "message": "wrong json format"})
+            return
+
+        webhook_url = body.get("webhook_url", "").strip()
+        if not webhook_url:
+            self.write({"success": False, "message": "webhook URL is empty"})
+            return
+
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(webhook_url)
+        except Exception:
+            self.write({"success": False, "message": "invalid URL format"})
+            return
+
+        if parsed.scheme != "https":
+            self.write({"success": False, "message": "only HTTPS URLs are allowed"})
+            return
+
+        if not any(parsed.netloc == host or parsed.netloc.endswith("." + host) for host in self.ALLOWED_HOSTS):
+            self.write({"success": False, "message": "only Discord webhook URLs are allowed"})
+            return
+
+        if not parsed.path.startswith("/api/webhooks/"):
+            self.write({"success": False, "message": "invalid Discord webhook URL format"})
+            return
+
+        _, config_dict = load_json()
+        debug = util.create_debug_logger(config_dict)
+
+        payload = {
+            "content": "[Test] Tickets Hunter webhook test successful!",
+            "username": "Tickets Hunter"
+        }
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=5.0)
+            if response.status_code in (200, 204):
+                debug.log("[Discord Webhook] Test OK")
+                self.write({"success": True, "message": "ok"})
+            else:
+                debug.log("[Discord Webhook] Test failed: HTTP %d" % response.status_code)
+                self.write({"success": False, "message": "HTTP %d" % response.status_code})
+        except Exception as exc:
+            debug.log("[Discord Webhook] Test failed: %s" % str(exc))
+            self.write({"success": False, "message": str(exc)})
+
+class TestTelegramHandler(tornado.web.RequestHandler):
+    def post(self):
+        try:
+            body = json.loads(self.request.body)
+        except Exception:
+            self.write({"success": False, "message": "wrong json format"})
+            return
+
+        bot_token = body.get("bot_token", "").strip()
+        chat_id = body.get("chat_id", "").strip()
+
+        if not bot_token:
+            self.write({"success": False, "message": "Bot Token is empty"})
+            return
+
+        import re
+        if not re.match(r'^\d+:[A-Za-z0-9_-]+$', bot_token):
+            self.write({"success": False, "message": "Bot Token format invalid"})
+            return
+
+        if not chat_id:
+            self.write({"success": False, "message": "Chat ID is empty"})
+            return
+
+        chat_ids = [cid.strip() for cid in chat_id.split(",") if cid.strip()]
+        if not chat_ids:
+            self.write({"success": False, "message": "Chat ID is empty"})
+            return
+
+        invalid_ids = [cid for cid in chat_ids if not re.match(r'^-?\d+$', cid)]
+        if invalid_ids:
+            self.write({"success": False, "message": "Chat ID format invalid: %s" % ", ".join(invalid_ids)})
+            return
+
+        _, config_dict = load_json()
+        debug = util.create_debug_logger(config_dict)
+
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        text = "[Test] Tickets Hunter Telegram test successful!"
+        errors = []
+        ok_count = 0
+        for cid in chat_ids:
+            try:
+                payload = {"chat_id": cid, "text": text}
+                response = requests.post(url, json=payload, timeout=5.0)
+                result = response.json()
+                if response.status_code == 200 and result.get("ok", False):
+                    ok_count += 1
+                else:
+                    desc = result.get("description", "HTTP %d" % response.status_code)
+                    errors.append(f"{cid}: {desc}")
+            except (requests.RequestException, ValueError) as exc:
+                safe_msg = str(exc).replace(bot_token, "***") if bot_token else str(exc)
+                errors.append(f"{cid}: {safe_msg}")
+
+        if ok_count == len(chat_ids):
+            debug.log("[Telegram] Test OK (%d chat(s))" % ok_count)
+            self.write({"success": True, "message": "ok"})
+        elif ok_count > 0:
+            debug.log("[Telegram] Test partial: %d/%d OK" % (ok_count, len(chat_ids)))
+            self.write({"success": True, "message": "%d/%d OK, errors: %s" % (ok_count, len(chat_ids), "; ".join(errors))})
+        else:
+            msg = "; ".join(errors)
+            debug.log("[Telegram] Test failed: %s" % msg)
+            self.write({"success": False, "message": msg})
+
 class OcrHandler(tornado.web.RequestHandler):
     def get(self):
         self.write({"answer": "1234"})
@@ -664,6 +791,8 @@ async def main_server():
         ("/save", SaveJsonHandler),
         ("/reset", ResetJsonHandler),
 
+        ("/test_discord_webhook", TestDiscordWebhookHandler),
+        ("/test_telegram", TestTelegramHandler),
         ("/ocr", OcrHandler),
         ("/query", QueryHandler),
         ("/question", QuestionHandler),

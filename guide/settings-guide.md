@@ -14,7 +14,7 @@
 
 ## 📚 目錄
 
-1. [設定方式](#設定方式)（含[搶票中即時修改設定](#搶票中即時修改設定--v202602-新增)）
+1. [設定方式](#設定方式)（含[搶票中即時修改設定](#搶票中即時修改設定)）
 2. [基礎設定](#基礎設定)
 3. [日期選擇設定](#日期選擇設定)
 4. [區域選擇設定](#區域選擇設定)
@@ -37,9 +37,11 @@ python settings.py
 
 在圖形介面中，您可以直接透過中文欄位名稱進行設定，無需手動編輯 JSON 檔案。
 
-> 💡 **Port 被佔用？** 若啟動失敗顯示「port is in used」，請參考[設定介面 Port](#設定介面-portserver_port-v202512-新增) 修改 Port 號碼。
+> 💡 **Port 被佔用？** 若啟動失敗顯示「port is in used」，請參考[設定介面 Port](#設定介面-portserver_port) 修改 Port 號碼。
 
-### 搶票中即時修改設定 ⭐ v2026.02 新增
+### 搶票中即時修改設定
+
+> ⭐ v2026.02 新增
 
 程式支援「即時套用」功能：**搶票中修改設定後儲存，程式會在 1 秒內自動套用新設定，不需要重新啟動。**
 
@@ -450,16 +452,19 @@ python settings.py
 #### OCR圖片取得方式（image_source）
 類型：字串 | 預設：canvas
 
-驗證碼圖片的來源類型。
-
+驗證碼圖片的取得方式。
 
 **可選值**：
-- canvas - 從 Canvas 元素擷取
-- img - 從 img 標籤擷取
+- `canvas`（預設）— 透過 JavaScript Canvas API 從畫面擷取驗證碼圖片
+- `NonBrowser` — 啟動獨立的 NonBrowser 視窗取得驗證碼（需搭配外部驗證碼工具使用）
+
+**使用情境**：
+- 一般情況使用 `canvas`（預設）即可
+- 若主瀏覽器無法正確擷取驗證碼，可嘗試切換為 `NonBrowser`
 
 ---
 
-#### 自訂 OCR 模型 ⭐ v2025.11.25 新增
+#### 自訂 OCR 模型
 類型：字串 | 預設：空白
 
 指定自訂 OCR 模型的目錄路徑，目前**僅支援 Ticketmaster 平台**。
@@ -478,6 +483,21 @@ python settings.py
 - 檔案不存在 → 顯示警告，自動使用預設模型
 
 **注意**：此功能目前僅支援 Ticketmaster 平台。
+
+---
+
+#### 使用通用 OCR 模型（use_universal）
+類型：布林值 | 預設：**啟用**
+
+是否使用內建通用自訓 OCR 模型進行驗證碼辨識。
+
+**說明**：
+- 啟用（預設）— 使用通用模型（`assets/model/universal/`），準確率 99%+，支援數字、大小寫英文字母
+- 停用 — 改用 ddddocr 官方模型
+
+**支援平台**：TixCraft、iBon、KHAM
+
+**建議**：保持啟用。若遇到辨識結果異常，可嘗試停用後測試。
 
 ---
 
@@ -573,7 +593,7 @@ FANCLUB2024
 
 ### iBon（ibon 售票系統）
 
-#### 驗證問題自動填寫 ⭐ v2025.12 新增
+#### 驗證問題自動填寫
 
 **功能說明**：iBon 購票時有時會出現驗證問題頁面，要求輸入手機號碼末幾碼、信用卡前 6 碼等資訊。此功能可自動偵測並填寫這些驗證問題。
 
@@ -720,7 +740,7 @@ FANCLUB2024
 
 **在圖形介面中，這些設定位於「進階設定」頁籤**
 
-### 設定介面 Port（server_port）⭐ v2025.12 新增
+### 設定介面 Port（server_port）
 類型：整數 | 預設：16888
 
 設定介面 Web Server 的連接埠號碼。
@@ -746,6 +766,20 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 - 16888（預設）
 - 16889
 - 17000
+
+---
+
+### 設定介面網址（remote_url）
+類型：字串 | 自動產生（唯讀）
+
+設定介面的存取網址，由系統根據「設定介面 Port」自動產生，無需手動修改。
+
+**說明**：
+- 格式：`http://127.0.0.1:{Port}/`
+- 例如 Port 為 16888 時，網址為 `http://127.0.0.1:16888/`
+- 此欄位為唯讀，修改後會在下次儲存時被覆蓋
+
+**用途**：在其他腳本或自動化工具中呼叫設定介面 API 時，可直接複製此網址。
 
 ---
 
@@ -788,6 +822,113 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 
 ---
 
+### 顯示時間戳記（show_timestamp）
+類型：布林值 | 預設：停用
+
+是否在程式輸出的每一行加上時間戳記。
+
+**說明**：
+- 啟用 — 每行輸出前加上 `[HH:MM:SS]` 格式的時間標記，例如：`[09:30:15] [DATE] found: 2024-12-31`
+- 停用（預設）— 正常輸出，不加時間標記
+
+**使用情境**：需要精確記錄每個動作的發生時間時啟用，例如搶票後檢視日誌分析流程。
+
+---
+
+### 重新啟動瀏覽器間隔(秒)（reset_browser_interval）
+類型：整數 | 預設：0（停用）
+
+定時自動重啟瀏覽器的間隔秒數。
+
+**說明**：
+- `0`（預設）— 停用，不自動重啟
+- 設定正整數（最小值 20）— 每隔指定秒數重啟瀏覽器
+
+**注意**：此設定目前儲存於設定檔，主程式尚未完整實作自動重啟邏輯，建議保持預設值 `0`。
+
+---
+
+### 代理伺服器（proxy_server_port）
+類型：字串 | 預設：空白（停用）
+
+設定瀏覽器連線所使用的代理伺服器位址與 Port。
+
+**格式**：`IP位址:Port`
+
+**範例**：
+```
+127.0.0.1:8080
+192.168.1.1:3128
+```
+
+**說明**：
+- 留空（預設）— 直接連線，不使用代理
+- 填入後 — 瀏覽器啟動時自動套用 `--proxy-server=IP:Port` 參數
+
+**使用情境**：搭配本機 VPN 工具或 HTTP/HTTPS 代理工具時使用。
+
+---
+
+### 停用相鄰座位（disable_adjacent_seat）
+類型：布林值 | 預設：停用
+
+是否允許選取不相鄰（非連座）的座位。
+
+**說明**：
+- 停用（預設）— 僅選取相鄰連座的座位組合
+- 啟用 — 接受不相鄰座位，提高選到票的機率
+
+**支援平台**：iBon、年代（Ticket）、KHAM、Ticketmaster
+
+**使用情境**：多人同行搶票時，若連座數量不夠，啟用此選項可改為接受非連座位置，降低選票失敗率。
+
+---
+
+### 隱藏部分圖片（hide_some_image）
+類型：布林值 | 預設：停用
+
+是否透過網路封鎖減少非必要資源載入，加速頁面回應。
+
+**說明**：
+- 啟用 — 封鎖字型（woff）、圖示（ico）及部分活動圖片的載入
+- 停用（預設）— 正常載入所有資源
+
+**使用情境**：網路速度較慢時，啟用可減少頁面載入時間，讓搶票流程更快。
+
+**注意**：啟用後頁面外觀可能不完整（缺少裝飾圖片），但不影響搶票功能。
+
+---
+
+### 封鎖 Facebook 網路（block_facebook_network）
+類型：布林值 | 預設：停用
+
+是否封鎖 Facebook 相關網路請求。
+
+**說明**：
+- 啟用 — 封鎖 `*.facebook.com/*` 及 `*.fbcdn.net/*` 的所有請求
+- 停用（預設）— 正常載入（部分票務平台會在頁面中嵌入 Facebook 追蹤腳本）
+
+**使用情境**：若 Facebook 追蹤腳本拖慢頁面速度，或希望減少外部連線時使用。
+
+---
+
+### 自動猜測驗證選項（auto_guess_options）
+類型：布林值 | 預設：停用
+
+是否自動猜測驗證碼選項題的答案（適用於圖文選擇題型的驗證）。
+
+**說明**：
+- 啟用 — 程式根據題目文字自動推測正確選項並填入
+- 停用（預設）— 等待手動選擇（適合不確定答案的情況）
+
+**支援平台**：KKTIX、TixCraft、iBon
+
+**使用情境**：部分平台在購票時會出現「請選擇正確答案」的選項題驗證（例如：「1+1=?」、「台北101在哪個縣市？」），啟用後程式會嘗試自動選擇正確答案。
+
+**注意**：猜測準確率取決於題目類型，若猜錯可能導致購票失敗，建議先測試後再決定是否啟用。
+
+---
+
 ### 自動刷新頁面間隔(秒)（auto_reload_page_interval）
 類型：浮點數 | 預設：5.0
 
@@ -824,7 +965,7 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 
 ---
 
-### Discord Webhook 通知 ⭐ v2025.12 新增
+### Discord Webhook 通知
 
 #### Discord Webhook URL（discord_webhook_url）
 類型：字串 | 預設：空白
@@ -874,6 +1015,70 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 - 通知失敗不會影響搶票流程
 
 **官方參考文件**：[Discord Webhooks 介紹](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks)
+
+---
+
+### Telegram Bot 通知
+
+> ⭐ v2026.03 新增
+
+#### Telegram Bot Token（telegram_bot_token）
+類型：字串 | 預設：空白
+
+Telegram Bot 的 API Token。留空則停用 Telegram 通知。
+
+在圖形介面中顯示為：**Telegram Bot Token**（文字框）
+
+#### Telegram Chat ID（telegram_chat_id）
+類型：字串 | 預設：空白
+
+接收通知的 Telegram 聊天室 ID。多個 ID 請用逗號隔開。
+
+在圖形介面中顯示為：**Telegram Chat ID**（文字框 + 測試按鈕）
+
+**功能說明**：
+- **訂單成功時**：發送「[平台名稱] order success! Please checkout and pay ASAP」
+- 支援同時發送到多個聊天室（逗號分隔 ID）
+- 通知不會影響搶票流程（使用非同步發送，3 秒超時）
+- 可與 Discord 通知同時啟用，兩者互不影響
+
+**如何建立 Telegram Bot**：
+
+1. **開啟 BotFather**
+   - 在 Telegram 搜尋 `@BotFather` 並開啟對話
+   - 或直接點擊：https://t.me/BotFather
+
+2. **建立新 Bot**
+   - 發送 `/newbot`
+   - 依照提示輸入 Bot 名稱（顯示名稱）
+   - 再輸入 Bot 使用者名稱（必須以 `bot` 結尾，例如 `MyTicketBot`）
+
+3. **取得 Bot Token**
+   - BotFather 會回覆一串 Token，格式類似：`123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
+   - 複製這串 Token 貼到設定介面的「Telegram Bot Token」欄位
+
+4. **取得 Chat ID**
+   - 在 Telegram 搜尋 `@userinfobot` 或 `@RawDataBot` 並開啟對話
+   - 發送任意訊息，Bot 會回覆您的 Chat ID（一串數字）
+   - 如果要發送到群組，先將您的 Bot 加入群組，再用 `@RawDataBot` 在群組中取得群組 Chat ID（通常為負數）
+
+5. **跟 Bot 對話（必要）**
+   - 在 Telegram 搜尋您剛建立的 Bot（用 `@您的Bot名稱`）
+   - 按下 **Start** 或發送 `/start`
+   - ⚠️ **未執行此步驟，Bot 無法發送訊息給您**（Telegram API 限制：Bot 只能回覆曾主動對話過的使用者）
+
+6. **貼到設定介面**
+   - 在「進階設定」頁籤找到「Telegram Bot Token」和「Telegram Chat ID」
+   - 分別貼上 Token 和 Chat ID
+   - 點擊「測試」按鈕確認設定正確
+   - 儲存設定
+
+**注意事項**：
+- Bot Token 是敏感資訊，請勿分享給他人
+- 多個 Chat ID 之間用逗號隔開，例如：`123456789, 987654321`
+- 留空 Token 或 Chat ID 則停用 Telegram 通知
+- 通知失敗不會影響搶票流程
+- 如果測試顯示「chat not found」，請確認您已跟 Bot 對話過（步驟 5）
 
 ---
 
@@ -1047,8 +1252,8 @@ FANCLUB999
 ---
 
 ### Q3: 可以同時用多個設定檔嗎？
-**A:** 可以！使用 config_launcher.py 管理多個設定檔：
-- 在 tickets_hunter/src 目錄執行 python config_launcher.py
+**A:** 可以！複製 settings.json 並改名（如 settings_A.json），啟動時指定設定檔：
+- `nodriver_tixcraft.exe --input settings_A.json`
 
 ---
 
