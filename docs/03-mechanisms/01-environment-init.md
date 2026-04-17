@@ -9,7 +9,7 @@
 
 環境初始化是整個自動化購票系統的第一個階段。系統透過 `cli()` → `main()` 進入點，依序完成：設定載入、瀏覽器啟動、Cookie 注入、網路封鎖與視窗調整。
 
-**核心目標**：建立穩定的 NoDriver 瀏覽器環境，確保後續階段可順利運作。
+**核心目標**：建立穩定的 ZenDriver 瀏覽器環境，確保後續階段可順利運作。
 
 **優先度**：🔴 P1 - 核心流程，必須完成
 
@@ -58,7 +58,7 @@ chrome_path = chrome_downloader.ensure_chrome_available(download_dir=webdriver_d
 
 若系統未安裝 Chrome，嘗試自動下載；下載失敗則拋出 `FileNotFoundError`。
 
-#### 2.2 NoDriver 瀏覽器參數
+#### 2.2 ZenDriver 瀏覽器參數
 
 `get_nodriver_browser_args()` (行 20345) 回傳經過 Cloudflare 驗證的啟動參數清單：
 
@@ -76,7 +76,7 @@ chrome_path = chrome_downloader.ensure_chrome_available(download_dir=webdriver_d
 
 #### 2.3 Config 組裝與瀏覽器啟動
 
-`get_extension_config()` (行 20399) 組裝 `nodriver.Config` 物件，支援三種模式：
+`get_extension_config()` (行 20399) 組裝 `zendriver.Config` 物件，支援三種模式：
 
 | 模式 | 觸發條件 | 行為 |
 |------|---------|------|
@@ -139,7 +139,7 @@ chrome_path = chrome_downloader.ensure_chrome_available(download_dir=webdriver_d
 
 - **全域時間戳**：當 `show_timestamp` 啟用時，覆寫 `builtins.print` 為帶時間前綴的版本 (行 26024-26031)
 - **OCR 初始化**：載入 `ddddocr` 模型，設定辨識範圍為小寫字母 (行 26093-26103)
-- **定時重新整理**：`check_refresh_datetime_occur()` (行 20651) 在指定時刻自動重新載入頁面
+- **定時開搶閘門**：`check_refresh_datetime_gate()` 在指定時刻前阻擋所有平台搶票邏輯，時間到達後立即重載頁面並放行
 
 ---
 
@@ -162,7 +162,7 @@ chrome_path = chrome_downloader.ensure_chrome_available(download_dir=webdriver_d
 **原因**：系統未安裝 Chrome 且自動下載失敗
 **解法**：手動安裝 Chrome，或檢查 `src/webdriver/` 目錄權限
 
-### NoDriver 連線失敗
+### ZenDriver 連線失敗
 **症狀**：`Failed to connect to browser`
 **原因**：前一個瀏覽器實例未正確關閉、port 衝突
 **解法**：關閉殘留的 Chrome 程序後重試

@@ -55,13 +55,12 @@ cd tickets_hunter
 pip install -r requirement.txt
 ```
 
-#### 4. NoDriver 安裝（推薦）
+#### 4. ZenDriver 安裝（推薦）
 ```bash
-# 使用上游最新版本（推薦）
-python -m pip install git+https://github.com/ultrafunkamsterdam/nodriver
+# 從 PyPI 安裝（推薦）
+pip install zendriver
 
-# 或使用 MaxBot 客製版
-python -m pip install git+https://github.com/max32002/nodriver
+# ZenDriver 是 nodriver 的活躍 fork，支援 Chrome 145+ 並有持續維護
 ```
 
 #### 5. OCR 驗證碼辨識（選用）
@@ -77,10 +76,10 @@ pip install ddddocr
 
 | 模式 | 值 | 說明 | 推薦度 |
 |------|-----|------|--------|
-| **NoDriver** | `"nodriver"` | 最強反偵測，支援 12 個平台 | ⭐⭐⭐ 推薦 |
+| **ZenDriver** | `"nodriver"` | 最強反偵測，支援 12 個平台（後端為 zendriver，nodriver 的活躍 fork） | ⭐⭐⭐ 推薦 |
 | Chrome | `"chrome"` | 傳統模式，維護中 | ⭐ |
 
-### NoDriver 支援平台（12 個完全支援）
+### ZenDriver 支援平台（12 個完全支援）
 
 | 類別 | 平台 | 完成度 |
 |------|------|--------|
@@ -110,7 +109,7 @@ python settings_old.py
 
 ## 執行搶票程式
 
-### NoDriver 模式（推薦）
+### ZenDriver 模式（推薦）
 ```bash
 cd tickets_hunter/src
 python nodriver_tixcraft.py
@@ -183,24 +182,26 @@ TicketPlus 搶票耗時: 1.823 秒
 ```
 
 ### 2. 定時啟動功能
-**用途**：在指定時間自動重整頁面啟動搶票
+**用途**：在指定時間到達前持續等待，時間到達後立即重整頁面開始搶票
 
 **設定方式**（settings.json）：
 ```json
 {
-  "refresh_datetime": "14:00:00"
+  "refresh_datetime": "2025/12/25 14:00:00"
 }
 ```
 
-**時間格式**：HH:MM:SS (24小時制)
-- `"14:00:00"` - 下午2點整
-- `"09:30:00"` - 上午9點30分
+**時間格式**：YYYY/MM/DD HH:MM:SS (24小時制)
+- `"2025/12/25 14:00:00"` - 12月25日下午2點整
+- `"2025/12/25 09:30:00"` - 12月25日上午9點30分
 - `""` - 停用功能
 
 **使用情境**：
 1. 已知開賣時間（如下午2點）
 2. 提前 5-10 分鐘啟動程式並導航到售票頁面
-3. 程式會在指定時間自動重整並開始搶票
+3. 程式倒數等待，在指定時間自動重整並開始搶票
+
+**提示**：建議設定比開售時間早 1-2 秒，補償網路與處理延遲。
 
 ---
 
@@ -238,26 +239,14 @@ TicketPlus 搶票耗時: 1.823 秒
 | `auto_select_mode` | `"random"` / `"from_top"` / `"from_bottom"` |
 
 ### OCR 驗證碼設定
-```json
-{
-  "ocr_captcha": {
-    "enable": true,
-    "beta": true,
-    "force_submit": true,
-    "image_source": "canvas",
-    "use_universal": true,
-    "path": "assets/model/universal"
-  }
-}
-```
+
+通常保持預設即可，機器人會自動選擇最適合的辨識模型。
 
 | 設定 | 說明 |
 |------|------|
-| `enable` | 啟用 OCR 自動辨識 |
-| `beta` | 使用 ddddocr beta 模型（fallback 時啟用） |
-| `force_submit` | 辨識後自動送出，不等待確認 |
-| `use_universal` | 使用內建通用 OCR 模型（準確率 99-100%） |
-| `path` | 通用模型路徑（預設：`assets/model/universal`） |
+| 啟用 OCR | 開啟自動驗證碼辨識（建議開啟） |
+| 自動送出 | 辨識完成後自動提交（建議開啟） |
+| 自訂模型路徑 | 進階用途：指定自己訓練的 OCR 模型路徑；留空則使用內建模型 |
 
 ---
 
@@ -287,7 +276,7 @@ pip install -r requirement.txt
 pip install ddddocr
 ```
 
-### NoDriver 連線失敗
+### ZenDriver 連線失敗
 
 **問題**：`Connection refused` 或 `Cannot connect to browser`
 
