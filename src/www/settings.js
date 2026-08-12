@@ -447,6 +447,7 @@ function renderBasicTabTranslations() {
   <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.galaxymacau.com')">Galaxy Macau</button>
   <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.ticketmaster.sg')">Ticketmaster Singapore</button>
   <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.ticketek.com.au')">Ticketek Australia</button>
+  <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://tkglobal.melon.com/')">Melon Ticket Global</button>
 </div>`);
     applyOrRestore('#refresh_datetime', 'placeholder', 'YYYY/MM/DD HH:MM:SS');
     applyOrRestore('#ticket_number option[selected="selected"]', 'textContent', 'Tickets');
@@ -836,6 +837,7 @@ const PROFILE_PLATFORMS = [
     { slug: 'urbtix',       label: 'Urbtix',           homepage: 'https://ticket.urbtix.hk' },
     { slug: 'hkticketing',  label: 'HKTicketing',      homepage: 'https://hotshow.hkticketing.com/' },
     { slug: 'ticketmaster', label: 'TicketMaster SG',  homepage: 'https://www.ticketmaster.sg' },
+    { slug: 'melon',        label: 'Melon Ticket',     homepage: 'https://tkglobal.melon.com/' },
 ];
 
 const PROFILE_STORAGE_KEY = 'maxbot_current_profile';
@@ -1073,6 +1075,7 @@ const PLATFORM_MAP = [
     { key: 'funone',      domains: ['funone.io'] },
     { key: 'fansigo',     domains: ['fansi.me'] },
     { key: 'urbtix',      domains: ['urbtix.hk'] },
+    { key: 'melon',       domains: ['melon.com'] },
 ];
 
 function detectPlatform(url) {

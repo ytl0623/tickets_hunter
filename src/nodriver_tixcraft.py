@@ -52,6 +52,7 @@ from platforms.tixcraft import *
 from platforms.ibon import *
 from platforms.kham import *
 from platforms.hkticketing import *
+from platforms.melon import *
 
 CONST_CITYLINE_SIGN_IN_URL = "https://www.cityline.com/Login.html?targetUrl=https%3A%2F%2Fwww.cityline.com%2FEvents.html"
 CONST_CITYLINE_HK_SIGN_IN_URL = "https://www.cityline.com.hk/Login.html?targetUrl=%s"
@@ -960,6 +961,9 @@ async def main(args):
 
         if 'cityline.com' in url:
             tab = await nodriver_cityline_main(tab, url, config_dict)
+        
+        if 'melon.com' in url:
+            tab = await nodriver_melon_main(tab, url, config_dict)
 
         softix_family = False
         if 'hkticketing.com' in url:
