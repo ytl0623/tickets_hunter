@@ -1,4 +1,3 @@
-import base64
 import json
 import os
 import pathlib
@@ -9,6 +8,7 @@ import socket
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from typing import Optional
 
 import requests
@@ -21,9 +21,8 @@ CONST_RANDOM = "random"
 
 # Keyword delimiter constants (Issue #23)
 CONST_KEYWORD_DELIMITER = ';'  # New delimiter (semicolon)
-CONST_KEYWORD_DELIMITER_OLD = ','  # Old delimiter (comma) for backward compatibility detection
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 
 def get_ip_address():
     gethostname = None
@@ -91,22 +90,6 @@ def find_between( s, first, last ):
         pass
     return ret
 
-def sx(s1):
-    key=18
-    return ''.join(chr(ord(a) ^ key) for a in s1)
-
-def decryptMe(b):
-    s=""
-    if(len(b)>0):
-        s=sx(base64.b64decode(b).decode("UTF-8"))
-    return s
-
-def encryptMe(s):
-    data=""
-    if(len(s)>0):
-        data=base64.b64encode(sx(s).encode('UTF-8')).decode("UTF-8")
-    return data
-
 def is_arm():
     ret = False
     if "-arm" in platform.platform():
@@ -124,6 +107,34 @@ def get_app_root():
         # This ensures we always get the src/ directory regardless of cwd
         app_root = os.path.dirname(os.path.abspath(__file__))
     return app_root
+
+
+# ===== Multi-instance support =====
+# Each bot process owns an instance id (derived from its config filename).
+# State files (pause flag, last URL, online answer) resolve through
+# get_instance_state_path() so concurrent instances do not clobber each other.
+# The "default" instance keeps legacy root paths for backward compatibility.
+
+CONST_DEFAULT_INSTANCE_ID = "default"
+_instance_id = CONST_DEFAULT_INSTANCE_ID
+
+def set_instance_id(instance_id):
+    global _instance_id
+    if instance_id and re.match(r'^[A-Za-z0-9_-]{1,32}$', instance_id):
+        _instance_id = instance_id
+        return True
+    return False
+
+def get_instance_id():
+    return _instance_id
+
+def get_instance_state_path(filename):
+    app_root = get_app_root()
+    if _instance_id == CONST_DEFAULT_INSTANCE_ID:
+        return os.path.join(app_root, filename)
+    instance_dir = os.path.join(app_root, "instances", _instance_id)
+    os.makedirs(instance_dir, exist_ok=True)
+    return os.path.join(instance_dir, filename)
 
 
 def format_keyword_for_display(keyword_string):
@@ -263,35 +274,6 @@ def write_string_to_file(filename, data):
     if not outfile is None:
         outfile.write("%s" % data)
 
-def save_url_to_file(remote_url, CONST_MAXBOT_ANSWER_ONLINE_FILE, force_write = False, timeout=0.5):
-    html_text = ""
-    if len(remote_url) > 0:
-        html_result = None
-        try:
-            html_result = requests.get(remote_url , timeout=timeout, allow_redirects=False)
-        except Exception as exc:
-            html_result = None
-            #print(exc)
-        if not html_result is None:
-            status_code = html_result.status_code
-            #print("status_code:", status_code)
-            if status_code == 200:
-                html_text = html_result.text
-                #print("html_text:", html_text)
-
-    is_write_to_file = False
-    if force_write:
-        is_write_to_file = True
-    if len(html_text) > 0:
-        is_write_to_file = True
-
-    if is_write_to_file:
-        html_text = format_config_keyword_for_json(html_text)
-        working_dir = get_app_root()
-        target_path = os.path.join(working_dir, CONST_MAXBOT_ANSWER_ONLINE_FILE)
-        write_string_to_file(target_path, html_text)
-    return is_write_to_file
-
 
 def play_mp3_async(sound_filename):
     threading.Thread(target=play_mp3, args=(sound_filename,)).start()
@@ -318,44 +300,6 @@ def force_remove_file(filepath):
         except Exception as exc:
             pass
 
-
-def clean_uc_exe_cache():
-    exe_name = "chromedriver%s"
-
-    platform = sys.platform
-    if platform.endswith("win32"):
-        exe_name %= ".exe"
-    if platform.endswith(("linux", "linux2")):
-        exe_name %= ""
-    if platform.endswith("darwin"):
-        exe_name %= ""
-
-    d = ""
-    if platform.endswith("win32"):
-        d = "~/appdata/roaming/undetected_chromedriver"
-    elif "LAMBDA_TASK_ROOT" in os.environ:
-        d = "/tmp/undetected_chromedriver"
-    elif platform.startswith(("linux", "linux2")):
-        d = "~/.local/share/undetected_chromedriver"
-    elif platform.endswith("darwin"):
-        d = "~/Library/Application Support/undetected_chromedriver"
-    else:
-        d = "~/.undetected_chromedriver"
-    data_path = os.path.abspath(os.path.expanduser(d))
-
-    is_cache_exist = False
-    p = pathlib.Path(data_path)
-    files = list(p.rglob("*chromedriver*?"))
-    for file in files:
-        if os.path.exists(str(file)):
-            is_cache_exist = True
-            try:
-                os.unlink(str(file))
-            except Exception as exc2:
-                print(exc2)
-                pass
-
-    return is_cache_exist
 
 def t_or_f(arg):
     ret = False
@@ -524,89 +468,6 @@ def get_brave_bin_path():
     return brave_path
 
 
-def dump_settings_to_maxbot_plus_extension(ext, config_dict, CONST_MAXBOT_CONFIG_FILE):
-    # sync config.
-    target_path = ext
-    target_path = os.path.join(target_path, "data")
-    target_path = os.path.join(target_path, CONST_MAXBOT_CONFIG_FILE)
-    #print("save as to:", target_path)
-    if os.path.isfile(target_path):
-        try:
-            #print("remove file:", target_path)
-            os.unlink(target_path)
-        except Exception as exc:
-            pass
-
-    try:
-        with open(target_path, 'w') as outfile:
-            json.dump(config_dict, outfile)
-    except Exception as e:
-        pass
-
-    # add host_permissions
-    target_path = ext
-    target_path = os.path.join(target_path, "manifest.json")
-
-    manifest_dict = None
-    if os.path.isfile(target_path):
-        try:
-            with open(target_path) as json_data:
-                manifest_dict = json.load(json_data)
-        except Exception as e:
-            pass
-
-    local_remote_url_array = []
-    local_remote_url = config_dict["advanced"]["remote_url"]
-    if len(local_remote_url) > 0:
-        try:
-            temp_remote_url_array = json.loads("["+ local_remote_url +"]")
-            for remote_url in temp_remote_url_array:
-                remote_url_final = remote_url + "*"
-                local_remote_url_array.append(remote_url_final)
-        except Exception as exc:
-            pass
-
-    if len(local_remote_url_array) > 0:
-        is_manifest_changed = False
-        if 'host_permissions' in manifest_dict:
-            for remote_url_final in local_remote_url_array:
-                if not remote_url_final in manifest_dict["host_permissions"]:
-                    #print("local remote_url not in manifest:", remote_url_final)
-                    manifest_dict["host_permissions"].append(remote_url_final)
-                    is_manifest_changed = True
-
-        if is_manifest_changed:
-            json_str = json.dumps(manifest_dict, indent=4)
-            try:
-                with open(target_path, 'w') as outfile:
-                    outfile.write(json_str)
-            except Exception as e:
-                pass
-
-
-def dump_settings_to_maxblock_plus_extension(ext, config_dict, CONST_MAXBOT_CONFIG_FILE, CONST_MAXBLOCK_EXTENSION_FILTER):
-    # sync config.
-    target_path = ext
-    target_path = os.path.join(target_path, "data")
-    # special case, due to data folder is empty, sometime will be removed.
-    if not os.path.exists(target_path):
-        os.mkdir(target_path)
-    target_path = os.path.join(target_path, CONST_MAXBOT_CONFIG_FILE)
-    #print("save as to:", target_path)
-    if os.path.isfile(target_path):
-        try:
-            #print("remove file:", target_path)
-            os.unlink(target_path)
-        except Exception as exc:
-            pass
-
-    try:
-        with open(target_path, 'w') as outfile:
-            config_dict["domain_filter"]=CONST_MAXBLOCK_EXTENSION_FILTER
-            json.dump(config_dict, outfile)
-    except Exception as e:
-        pass
-
 # convert web string to reg pattern
 def convert_string_to_pattern(my_str, dynamic_length=True):
     my_hint_anwser_length = len(my_str)
@@ -650,9 +511,8 @@ def convert_string_to_pattern(my_str, dynamic_length=True):
             my_formated = my_formated.replace(r"[\d]",r"[\d]+")
     return my_formated
 
-def guess_answer_list_from_multi_options(tmp_text):
-    show_debug_message = True    # debug.
-    show_debug_message = False   # online
+def guess_answer_list_from_multi_options(tmp_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     options_list = []
     matched_pattern = ""
@@ -747,20 +607,17 @@ def guess_answer_list_from_multi_options(tmp_text):
 
                     matched_pattern = pattern
 
-    if show_debug_message:
-        print("matched pattern:", matched_pattern)
+    debug.log("matched pattern:", matched_pattern)
 
     # default remove quota
     is_trim_quota = not check_answer_keep_symbol(tmp_text)
-    if show_debug_message:
-        print("is_trim_quota:", is_trim_quota)
+    debug.log("is_trim_quota:", is_trim_quota)
 
     return_list = []
     if len(options_list) > 0:
         options_list_length = len(options_list)
-        if show_debug_message:
-            print("options_list_length:", options_list_length)
-            print("options_list:", options_list)
+        debug.log("options_list_length:", options_list_length)
+        debug.log("options_list:", options_list)
         if options_list_length > 2:
             is_all_options_same_length = True
             options_length_count = {}
@@ -774,8 +631,7 @@ def guess_answer_list_from_multi_options(tmp_text):
                 else:
                     options_length_count[current_option_length] = 1
 
-            if show_debug_message:
-                print("is_all_options_same_length:", is_all_options_same_length)
+            debug.log("is_all_options_same_length:", is_all_options_same_length)
 
             if is_all_options_same_length:
                 return_list = []
@@ -857,9 +713,8 @@ def guess_answer_list_from_symbols(captcha_text_div_text):
             break
     return return_list
 
-def get_offical_hint_string_from_symbol(symbol, tmp_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def get_offical_hint_string_from_symbol(symbol, tmp_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     offical_hint_string = ""
     if symbol in tmp_text:
@@ -868,8 +723,7 @@ def get_offical_hint_string_from_symbol(symbol, tmp_text):
             if '【' in tmp_text and '】' in tmp_text:
                 hint_list = re.findall('【.*?】', tmp_text)
                 if not hint_list is None:
-                    if show_debug_message:
-                        print("【.*?】hint_list:", hint_list)
+                    debug.log("hint_list:", hint_list)
                     for hint in hint_list:
                         if symbol in hint:
                             offical_hint_string = hint[1:-1]
@@ -878,8 +732,7 @@ def get_offical_hint_string_from_symbol(symbol, tmp_text):
             if '(' in tmp_text and ')' in tmp_text:
                 hint_list = re.findall(r'\(.*?\)', tmp_text)
                 if not hint_list is None:
-                    if show_debug_message:
-                        print(r"\(.*?\)hint_list:", hint_list)
+                    debug.log(r"\(.*?\)hint_list:", hint_list)
                     for hint in hint_list:
                         if symbol in hint:
                             offical_hint_string = hint[1:-1]
@@ -888,8 +741,7 @@ def get_offical_hint_string_from_symbol(symbol, tmp_text):
             if '[' in tmp_text and ']' in tmp_text:
                 hint_list = re.findall('[.*?]', tmp_text)
                 if not hint_list is None:
-                    if show_debug_message:
-                        print("[.*?]hint_list:", hint_list)
+                    debug.log("[.*?]hint_list:", hint_list)
                     for hint in hint_list:
                         if symbol in hint:
                             offical_hint_string = hint[1:-1]
@@ -899,9 +751,8 @@ def get_offical_hint_string_from_symbol(symbol, tmp_text):
     return offical_hint_string
 
 
-def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     tmp_text = format_question_string(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
 
@@ -929,7 +780,7 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
     if offical_hint_string == "":
         # for: 若你覺得答案為 a，請輸入 a
         if '答案' in tmp_text and CONST_INPUT_SYMBOL in tmp_text:
-            offical_hint_string = get_offical_hint_string_from_symbol(CONST_INPUT_SYMBOL, tmp_text)
+            offical_hint_string = get_offical_hint_string_from_symbol(CONST_INPUT_SYMBOL, tmp_text, config_dict)
         if len(offical_hint_string) > 0:
             right_part = offical_hint_string.split(CONST_INPUT_SYMBOL)[1]
             #print("right_part:", right_part)
@@ -944,7 +795,7 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
 
 
     if offical_hint_string == "":
-        offical_hint_string = get_offical_hint_string_from_symbol(CONST_EXAMPLE_SYMBOL, tmp_text)
+        offical_hint_string = get_offical_hint_string_from_symbol(CONST_EXAMPLE_SYMBOL, tmp_text, config_dict)
         if len(offical_hint_string) > 0:
             right_part = offical_hint_string.split(CONST_EXAMPLE_SYMBOL)[1]
             if len(offical_hint_string) == len(tmp_text):
@@ -960,8 +811,7 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
     if len(offical_hint_string_anwser) > 0:
         offical_hint_string = offical_hint_string.split(offical_hint_string_anwser)[0]
 
-    if show_debug_message:
-        print("offical_hint_string:", offical_hint_string)
+    debug.log("offical_hint_string:", offical_hint_string)
 
     # try rule4:
     # get hint from rule 3: without '(' & '), but use "*"
@@ -1071,8 +921,7 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
             offical_hint_string = tmp_text[star_index: space_index]
 
     if len(offical_hint_string) > 0:
-        if show_debug_message:
-            print("offical_hint_string_anwser:", offical_hint_string_anwser)
+        debug.log("offical_hint_string_anwser:", offical_hint_string_anwser)
         my_anwser_formated = convert_string_to_pattern(offical_hint_string_anwser)
 
     my_options = tmp_text
@@ -1091,9 +940,8 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
                 star_index = tmp_text_org.find(target_symbol)
                 my_options = tmp_text_org[star_index-1:]
 
-    if show_debug_message:
-        print("tmp_text:", tmp_text)
-        print("my_options:", my_options)
+    debug.log("tmp_text:", tmp_text)
+    debug.log("my_options:", my_options)
 
     if len(my_anwser_formated) > 0:
         allow_delimitor_symbols = ")].: }"
@@ -1107,13 +955,11 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
             if maybe_delimitor in allow_delimitor_symbols:
                 my_answer_delimitor = maybe_delimitor
 
-    if show_debug_message:
-        print("my_answer_delimitor:", my_answer_delimitor)
+    debug.log("my_answer_delimitor:", my_answer_delimitor)
 
     # default remove quota
     is_trim_quota = not check_answer_keep_symbol(tmp_text)
-    if show_debug_message:
-        print("is_trim_quota:", is_trim_quota)
+    debug.log("is_trim_quota:", is_trim_quota)
 
     return_list = []
     if len(my_anwser_formated) > 0:
@@ -1122,10 +968,9 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
             new_pattern = my_anwser_formated + '\\' + my_answer_delimitor
 
         return_list = re.findall(new_pattern, my_options)
-        if show_debug_message:
-            print("my_anwser_formated:", my_anwser_formated)
-            print("new_pattern:", new_pattern)
-            print("return_list:" , return_list)
+        debug.log("my_anwser_formated:", my_anwser_formated)
+        debug.log("new_pattern:", new_pattern)
+        debug.log("return_list:" , return_list)
 
         if not return_list is None:
             if len(return_list) == 1:
@@ -1144,8 +989,7 @@ def guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
                     if len(my_answer_delimitor) > 0:
                         for idx in range(return_list_length):
                             return_list[idx]=return_list[idx].replace(my_answer_delimitor,'')
-                if show_debug_message:
-                    print("cleaned return_list:" , return_list)
+                debug.log("cleaned return_list:" , return_list)
 
         if return_list is None:
             return_list = []
@@ -1224,9 +1068,8 @@ def permutations(iterable, r=None):
         else:
             return
 
-def get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text):
-    show_debug_message = True    # debug.
-    show_debug_message = False   # online
+def get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     return_list = []
 
@@ -1234,20 +1077,19 @@ def get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
 
     # guess answer list from multi-options: 【】() []
     if len(return_list)==0:
-        return_list = guess_answer_list_from_multi_options(tmp_text)
-    if show_debug_message:
-        print("captcha_text_div_text:", captcha_text_div_text)
-        if len(return_list) > 0:
-            print("found, guess_answer_list_from_multi_options:", return_list)
+        return_list = guess_answer_list_from_multi_options(tmp_text, config_dict)
+    debug.log("captcha_text_div_text:", captcha_text_div_text)
+    if len(return_list) > 0:
+        debug.log("found, guess_answer_list_from_multi_options:", return_list)
 
     offical_hint_string_anwser = ""
     if len(return_list)==0:
-        return_list, offical_hint_string_anwser = guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
+        return_list, offical_hint_string_anwser = guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text, config_dict)
     else:
         is_match_factorial = False
         mutiple = 0
 
-        return_list_2, offical_hint_string_anwser = guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
+        return_list_2, offical_hint_string_anwser = guess_answer_list_from_hint(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text, config_dict)
         if return_list_2 is None:
             if len(offical_hint_string_anwser) >=3:
                 if len(return_list) >=3:
@@ -1255,9 +1097,8 @@ def get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
                     if mutiple >=3 :
                         is_match_factorial = True
 
-        if show_debug_message:
-            print("mutiple:", mutiple)
-            print("is_match_factorial:", is_match_factorial)
+        debug.log("mutiple:", mutiple)
+        debug.log("is_match_factorial:", is_match_factorial)
         if is_match_factorial:
             is_match_factorial = False
             order_string_list = ['排列','排序','依序','順序','遞增','遞減','升冪','降冪','新到舊','舊到新','小到大','大到小','高到低','低到高']
@@ -1273,25 +1114,19 @@ def get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captch
             for item_tuple in new_array:
                 return_list.append(''.join(item_tuple))
 
-        if show_debug_message:
-            if len(return_list) > 0:
-                print("found, guess_answer_list_from_hint:", return_list)
+        if len(return_list) > 0:
+            debug.log("found, guess_answer_list_from_hint:", return_list)
 
     if len(return_list)==0:
         return_list = guess_answer_list_from_symbols(captcha_text_div_text)
-        if show_debug_message:
-            if len(return_list) > 0:
-                print("found, guess_answer_list_from_symbols:", return_list)
+        if len(return_list) > 0:
+            debug.log("found, guess_answer_list_from_symbols:", return_list)
 
     return return_list
 
 
 def get_matched_blocks_by_keyword_item_set(config_dict, auto_select_mode, keyword_item_set, formated_area_list):
-    show_debug_message = True    # debug.
-    show_debug_message = False   # online
-
-    if config_dict["advanced"]["verbose"]:
-        show_debug_message = True
+    debug = create_debug_logger(config_dict)
 
     matched_blocks = []
     for row in formated_area_list:
@@ -1302,8 +1137,7 @@ def get_matched_blocks_by_keyword_item_set(config_dict, auto_select_mode, keywor
             row_html = row.get_attribute('innerHTML')
             row_text = remove_html_tags(row_html)
         except Exception as exc:
-            if show_debug_message:
-                print(exc)
+            debug.log(exc)
             # error, exit loop
             break
 
@@ -1314,8 +1148,7 @@ def get_matched_blocks_by_keyword_item_set(config_dict, auto_select_mode, keywor
         if len(row_text) > 0:
             # start to compare, normalize all.
             row_text = format_keyword_string(row_text)
-            if show_debug_message:
-                print("row_text:", row_text)
+            debug.log("row_text:", row_text)
 
             is_match_all = False
             if ' ' in keyword_item_set:
@@ -1436,6 +1269,29 @@ def get_debug_mode(config_dict):
         return False
 
 
+class DebugLogger:
+    """Unified debug output. Timestamp controlled by show_timestamp setting."""
+
+    def __init__(self, config_dict=None, enabled=None):
+        if enabled is not None:
+            self.enabled = enabled
+        elif config_dict:
+            self.enabled = get_debug_mode(config_dict)
+        else:
+            self.enabled = False
+
+    def log(self, *args):
+        if not self.enabled or not args:
+            return
+        text = " ".join(str(a) for a in args)
+        print(text)
+
+
+def create_debug_logger(config_dict=None, enabled=None):
+    """Create DebugLogger instance."""
+    return DebugLogger(config_dict, enabled)
+
+
 def parse_keyword_string_to_array(keyword_string):
     """
     Parse keyword string to array using JSON format.
@@ -1521,12 +1377,41 @@ def is_row_match_keyword(keyword_string, row_text):
 
 def reset_row_text_if_match_keyword_exclude(config_dict, row_text):
     area_keyword_exclude = config_dict["keyword_exclude"]
-    return is_row_match_keyword(area_keyword_exclude, row_text)
+    if len(area_keyword_exclude) > 0:
+        return is_row_match_keyword(area_keyword_exclude, row_text)
+    else:
+        return False
 
 
-def guess_tixcraft_question(driver, question_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def yii_captcha_hash(code):
+    """Yii2 CaptchaAction generateValidationHash: sum(ord(c) << i for i, c)."""
+    return sum(ord(c) << i for i, c in enumerate(code.lower()))
+
+def yii_captcha_verify(answer, hash1):
+    """Verify 4-char OCR answer against Yii2 captcha hash1."""
+    return bool(answer) and len(answer) == 4 and yii_captcha_hash(answer) == hash1
+
+def yii_captcha_edit1(pred, expected_hash):
+    """Find edit-distance-1 corrections that match expected_hash.
+    Returns list of corrected candidates (a-z charset, length 4)."""
+    pred = pred.lower()
+    length = 4
+    candidates = []
+    for pos in range(length):
+        fixed_sum = sum(ord(pred[j]) << j for j in range(length) if j != pos)
+        remainder = expected_hash - fixed_sum
+        shift = 1 << pos
+        if remainder > 0 and remainder % shift == 0:
+            c_code = remainder // shift
+            if 97 <= c_code <= 122 and chr(c_code) != pred[pos]:
+                corrected = list(pred)
+                corrected[pos] = chr(c_code)
+                candidates.append(''.join(corrected))
+    return candidates
+
+
+def guess_tixcraft_question(driver, question_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     answer_list = []
 
@@ -1537,24 +1422,19 @@ def guess_tixcraft_question(driver, question_text):
         formated_html_text = format_quota_string(formated_html_text)
 
         if '【' in formated_html_text and '】' in formated_html_text:
-            # PS: 這個太容易沖突，因為問題類型太多，不能直接使用。
-            #inferred_answer_string = find_between(formated_html_text, "【", "】")
             pass
 
-    if show_debug_message:
-        print("formated_html_text:", formated_html_text)
+    debug.log("formated_html_text:", formated_html_text)
 
     # start to guess answer
     inferred_answer_string = None
 
-    # 請輸入"YES"，代表您已詳閱且瞭解並同意。
     if inferred_answer_string is None:
         if '輸入"YES"' in formated_html_text:
             if '已詳閱' in formated_html_text or '請詳閱' in formated_html_text:
                 if '同意' in formated_html_text:
                     inferred_answer_string = 'YES'
 
-    # 購票前請詳閱注意事項，並於驗證碼欄位輸入【同意】繼續購票流程。
     if inferred_answer_string is None:
         if '驗證碼' in formated_html_text or '驗證欄位' in formated_html_text:
             if '已詳閱' in formated_html_text or '請詳閱' in formated_html_text:
@@ -1563,7 +1443,7 @@ def guess_tixcraft_question(driver, question_text):
 
     if inferred_answer_string is None:
         if len(question_text) > 0:
-            answer_list = get_answer_list_from_question_string(None, question_text)
+            answer_list = get_answer_list_from_question_string(None, question_text, config_dict)
     else:
         answer_list = [answer_list]
 
@@ -1584,10 +1464,12 @@ def get_answer_list_from_user_guess_string(config_dict, CONST_MAXBOT_ANSWER_ONLI
             local_array = []
 
     # load from internet.
+    # Resolve per-instance path so concurrent instances read their own answers.
     user_guess_string = ""
-    if os.path.exists(CONST_MAXBOT_ANSWER_ONLINE_FILE):
+    answer_file_path = get_instance_state_path(CONST_MAXBOT_ANSWER_ONLINE_FILE)
+    if os.path.exists(answer_file_path):
         try:
-            with open(CONST_MAXBOT_ANSWER_ONLINE_FILE, "r") as text_file:
+            with open(answer_file_path, "r") as text_file:
                 user_guess_string = text_file.readline()
         except Exception as e:
             pass
@@ -1694,10 +1576,8 @@ def check_answer_keep_symbol(captcha_text_div_text):
 
     return is_need_keep_symbol
 
-#PS: this is for selenium webdriver.
-def kktix_get_web_datetime(registrationsNewApp_div):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def kktix_get_web_datetime(registrationsNewApp_div, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     web_datetime = None
 
@@ -1708,9 +1588,8 @@ def kktix_get_web_datetime(registrationsNewApp_div):
         try:
             el_web_datetime_list = registrationsNewApp_div.find_elements(By.TAG_NAME, 'td')
         except Exception as exc:
-            if show_debug_message:
-                print("find td.ng-binding Exception")
-                print(exc)
+            debug.log("find td.ng-binding Exception")
+            debug.log(exc)
             pass
         #print("is_found_web_datetime", is_found_web_datetime)
 
@@ -1722,12 +1601,10 @@ def kktix_get_web_datetime(registrationsNewApp_div):
                 el_web_datetime_text = None
                 try:
                     el_web_datetime_text = el_web_datetime.text
-                    if show_debug_message:
-                        print("el_web_datetime_text:", el_web_datetime_text)
+                    debug.log("el_web_datetime_text:", el_web_datetime_text)
                 except Exception as exc:
-                    if show_debug_message:
-                        print('parse web datetime fail:')
-                        print(exc)
+                    debug.log('parse web datetime fail:')
+                    debug.log(exc)
                     pass
 
                 if not el_web_datetime_text is None:
@@ -1746,15 +1623,13 @@ def kktix_get_web_datetime(registrationsNewApp_div):
     else:
         print("find td.ng-binding fail")
 
-    if show_debug_message:
-        print('is_found_web_datetime:', is_found_web_datetime)
-        print('web_datetime:', web_datetime)
+    debug.log('is_found_web_datetime:', is_found_web_datetime)
+    debug.log('web_datetime:', web_datetime)
 
     return web_datetime
 
-def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     inferred_answer_string = None
 
@@ -1778,18 +1653,15 @@ def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
     if 'the date of the show you purchased' in captcha_text_div_text:
         is_need_parse_web_datetime = True
 
-    if show_debug_message:
-        print("is_need_parse_web_datetime:", is_need_parse_web_datetime)
+    debug.log("is_need_parse_web_datetime:", is_need_parse_web_datetime)
 
     if is_need_parse_web_datetime:
-        web_datetime = kktix_get_web_datetime(registrationsNewApp_div)
+        web_datetime = kktix_get_web_datetime(registrationsNewApp_div, config_dict)
         if not web_datetime is None:
-            if show_debug_message:
-                print("web_datetime:", web_datetime)
+            debug.log("web_datetime:", web_datetime)
 
             captcha_text_formatted = format_question_string(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
-            if show_debug_message:
-                print("captcha_text_formatted", captcha_text_formatted)
+            debug.log("captcha_text_formatted", captcha_text_formatted)
 
             my_datetime_foramted = None
 
@@ -1815,8 +1687,7 @@ def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
                         my_datetime_foramted = "%m%d"
                     #print("my_datetime_foramted:", my_datetime_foramted)
 
-            if show_debug_message:
-                print("my_datetime_foramted", my_datetime_foramted)
+            debug.log("my_datetime_foramted", my_datetime_foramted)
 
             if my_datetime_foramted is None:
                 now = datetime.now()
@@ -1858,10 +1729,9 @@ def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
                         if my_anwser_formated == "[\\d][\\d][\\d][\\d]/[\\d][\\d]/[\\d][\\d]":
                             my_datetime_foramted = "%Y/%m/%d"
 
-                        if show_debug_message:
-                            print("my_hint_anwser:", my_hint_anwser)
-                            print("my_anwser_formated:", my_anwser_formated)
-                            print("my_datetime_foramted:", my_datetime_foramted)
+                        debug.log("my_hint_anwser:", my_hint_anwser)
+                        debug.log("my_anwser_formated:", my_anwser_formated)
+                        debug.log("my_datetime_foramted:", my_datetime_foramted)
                         break
 
             if not my_datetime_foramted is None:
@@ -1869,8 +1739,7 @@ def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
                 if my_delimitor_symbol in web_datetime:
                     web_datetime = web_datetime[:web_datetime.find(my_delimitor_symbol)]
                 date_time = datetime.strptime(web_datetime,"%Y/%m/%d")
-                if show_debug_message:
-                    print("our web date_time:", date_time)
+                debug.log("our web date_time:", date_time)
                 ans = None
                 try:
                     if not date_time is None:
@@ -1878,14 +1747,12 @@ def get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
                 except Exception as exc:
                     pass
                 inferred_answer_string = ans
-                if show_debug_message:
-                    print("web date_time anwser:", ans)
+                debug.log("web date_time anwser:", ans)
 
     return inferred_answer_string
 
-def get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     inferred_answer_string = None
 
@@ -1911,7 +1778,7 @@ def get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
     if is_need_parse_web_time:
         web_datetime = None
         if not registrationsNewApp_div is None:
-            web_datetime = kktix_get_web_datetime(registrationsNewApp_div)
+            web_datetime = kktix_get_web_datetime(registrationsNewApp_div, config_dict)
         if not web_datetime is None:
             tmp_text = format_question_string(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
 
@@ -1970,9 +1837,8 @@ def get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, re
 
     return inferred_answer_string
 
-def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_div_text):
-    show_debug_message = True       # debug.
-    show_debug_message = False      # online
+def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_div_text, config_dict=None):
+    debug = create_debug_logger(config_dict)
 
     inferred_answer_string = None
     answer_list = []
@@ -2071,7 +1937,7 @@ def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_d
 
         is_match_input_quota_text = False
         if len(formated_html_text) <= 30:
-            print("formated_html_text:", formated_html_text)
+            debug.log("formated_html_text:", formated_html_text)
             if not '\n' in formated_html_text:
                 if '【' in formated_html_text and '】' in formated_html_text:
                     is_match_input_quota_text = True
@@ -2107,11 +1973,11 @@ def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_d
 
     # parse '演出日期'
     if inferred_answer_string is None:
-        inferred_answer_string = get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text)
+        inferred_answer_string = get_answer_string_from_web_date(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict)
 
     # parse '演出時間'
     if inferred_answer_string is None:
-        inferred_answer_string = get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text)
+        inferred_answer_string = get_answer_string_from_web_time(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, registrationsNewApp_div, captcha_text_div_text, config_dict)
 
     # name of event.
     if inferred_answer_string is None:
@@ -2152,16 +2018,13 @@ def get_answer_list_from_question_string(registrationsNewApp_div, captcha_text_d
     # still no answer.
     if inferred_answer_string is None:
         if not is_combine_two_question:
-            answer_list = get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text)
-            if show_debug_message:
-                print("guess answer list:", answer_list)
+            answer_list = get_answer_list_by_question(CONST_EXAMPLE_SYMBOL, CONST_INPUT_SYMBOL, captcha_text_div_text, config_dict)
+            debug.log("guess answer list:", answer_list)
         else:
-            if show_debug_message:
-                print("skip to guess answer because of combine question...")
+            debug.log("skip to guess answer because of combine question...")
 
     else:
-        if show_debug_message:
-            print("got an inferred_answer_string:", inferred_answer_string)
+        debug.log("got an inferred_answer_string:", inferred_answer_string)
         answer_list = [inferred_answer_string]
 
     return answer_list
@@ -2215,20 +2078,13 @@ def kktix_get_event_code(url):
     #print('event_code:',event_code)
     return event_code
 
-def get_kktix_status_by_url(url):
-    registerStatus = ""
-    if len(url) > 0:
-        event_code = kktix_get_event_code(url)
-        #print(event_code)
-        if len(event_code) > 0:
-            registerStatus = kktix_get_registerStatus(event_code)
-            #print(registerStatus)
-    return registerStatus
-
-def launch_maxbot(script_name="chrome_tixcraft", filename="", homepage="", kktix_account = "", kktix_password="", window_size="", headless=""):
+def launch_maxbot(script_name="nodriver_tixcraft", filename="", homepage="", kktix_account = "", kktix_password="", window_size="", headless="", instance=""):
     cmd_argument = []
     if len(filename) > 0:
         cmd_argument.append('--input=' + filename)
+    if len(instance) > 0:
+        # Override instance id (e.g. second run of the same profile)
+        cmd_argument.append('--instance=' + instance)
     if len(homepage) > 0:
         cmd_argument.append('--homepage=' + homepage)
     if len(kktix_account) > 0:
@@ -2244,21 +2100,23 @@ def launch_maxbot(script_name="chrome_tixcraft", filename="", homepage="", kktix
     if hasattr(sys, 'frozen'):
         print("execute in frozen mode")
         # check platform here.
-        cmd = './' + script_name + ' '.join(cmd_argument)
+        binary_name = script_name
         if platform.system() == 'Darwin':
             print("execute MacOS python script")
         if platform.system() == 'Linux':
             print("execute linux binary")
         if platform.system() == 'Windows':
             print("execute .exe binary.")
-            cmd = script_name + '.exe ' + ' '.join(cmd_argument)
-        subprocess.Popen(cmd, shell=True, cwd=working_dir)
+            binary_name = script_name + '.exe'
+        # Pass argv as a list (shell=False). A shell command string is split on
+        # spaces, so any install path containing one truncates --input= and the
+        # child exits with "unrecognized arguments" (issue #378). The binary
+        # needs an absolute path: cwd= sets the child's directory but does not
+        # affect how the executable itself is resolved.
+        binary_path = os.path.join(working_dir, binary_name)
+        subprocess.Popen([binary_path] + cmd_argument, cwd=working_dir)
     else:
-        interpreter_binary = 'python'
-        interpreter_binary_alt = 'python3'
-        if platform.system() != 'Windows':
-            interpreter_binary = 'python3'
-            interpreter_binary_alt = 'python'
+        interpreter_binary = sys.executable
         print("execute in shell mode.")
 
         try:
@@ -2266,14 +2124,9 @@ def launch_maxbot(script_name="chrome_tixcraft", filename="", homepage="", kktix
             cmd_array = [interpreter_binary, script_name + '.py'] + cmd_argument
             s=subprocess.Popen(cmd_array, cwd=working_dir)
         except Exception as exc:
-            print('try', interpreter_binary_alt)
-            try:
-                cmd_array = [interpreter_binary_alt, script_name + '.py'] + cmd_argument
-                s=subprocess.Popen(cmd_array, cwd=working_dir)
-            except Exception as exc:
-                msg=str(exc)
-                print("exeption:", msg)
-                pass
+            msg=str(exc)
+            print("exeption:", msg)
+            pass
 
 def parse_nodriver_result(result):
     """
@@ -2365,17 +2218,21 @@ def get_token():
 # Discord Webhook Functions (specs/009-discord-webhook)
 # =============================================================================
 
-def build_discord_message(stage: str, platform_name: str) -> dict:
+def build_discord_message(stage: str, platform_name: str, custom_message: str = None) -> dict:
     """
     Build Discord webhook message payload based on stage and platform.
 
     Args:
         stage: Notification stage ("ticket" or "order")
         platform_name: Platform name (e.g., "TixCraft", "iBon")
+        custom_message: User-defined message text; if non-empty, overrides default.
 
     Returns:
         dict: Discord Webhook payload with content and username
     """
+    if custom_message:
+        return {"content": custom_message, "username": "Tickets Hunter"}
+
     if not platform_name:
         platform_name = "Unknown"
 
@@ -2397,7 +2254,8 @@ def send_discord_webhook(
     stage: str,
     platform_name: str,
     timeout: float = 3.0,
-    verbose: bool = False
+    verbose: bool = False,
+    custom_message: str = None
 ) -> bool:
     """
     Send Discord Webhook notification (synchronous).
@@ -2411,6 +2269,7 @@ def send_discord_webhook(
         platform_name: Platform name (e.g., "TixCraft", "iBon")
         timeout: Request timeout in seconds, default 3.0
         verbose: Whether to print error messages
+        custom_message: User-defined message text; if non-empty, overrides default.
 
     Returns:
         bool: True if sent successfully, False otherwise
@@ -2419,8 +2278,9 @@ def send_discord_webhook(
     if not webhook_url:
         return False
 
+    debug = DebugLogger(enabled=verbose)
     try:
-        payload = build_discord_message(stage, platform_name)
+        payload = build_discord_message(stage, platform_name, custom_message=custom_message)
         response = requests.post(
             webhook_url,
             json=payload,
@@ -2428,9 +2288,9 @@ def send_discord_webhook(
         )
         # Discord returns 204 No Content on success
         return response.status_code in (200, 204)
-    except Exception as exc:
-        if verbose:
-            print(f"[Discord Webhook] Send failed: {exc}")
+    except (requests.RequestException, ValueError) as exc:
+        safe_msg = str(exc).replace(webhook_url, "***") if webhook_url else str(exc)
+        debug.log(f"[Discord Webhook] Send failed: {safe_msg}")
         return False
 
 
@@ -2439,7 +2299,8 @@ def send_discord_webhook_async(
     stage: str,
     platform_name: str,
     timeout: float = 3.0,
-    verbose: bool = False
+    verbose: bool = False,
+    custom_message: str = None
 ) -> None:
     """
     Send Discord Webhook notification asynchronously.
@@ -2453,6 +2314,7 @@ def send_discord_webhook_async(
         platform_name: Platform name (e.g., "TixCraft", "iBon")
         timeout: Request timeout in seconds, default 3.0
         verbose: Whether to print error messages
+        custom_message: User-defined message text; if non-empty, overrides default.
     """
     # Skip if URL is empty or None
     if not webhook_url:
@@ -2460,7 +2322,122 @@ def send_discord_webhook_async(
 
     thread = threading.Thread(
         target=send_discord_webhook,
-        args=(webhook_url, stage, platform_name, timeout, verbose),
+        args=(webhook_url, stage, platform_name),
+        kwargs={"timeout": timeout, "verbose": verbose, "custom_message": custom_message},
+        daemon=True
+    )
+    thread.start()
+
+
+def build_telegram_message(stage: str, platform_name: str, custom_message: str = None) -> str:
+    """
+    Build Telegram notification message text based on stage and platform.
+
+    Args:
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+        custom_message: User-defined message text; if non-empty, overrides default.
+
+    Returns:
+        str: Message text
+    """
+    if custom_message:
+        return custom_message
+
+    if not platform_name:
+        platform_name = "Unknown"
+
+    if stage == "ticket":
+        message = f"[{platform_name}] found ticket! Please check your computer"
+    elif stage == "order":
+        message = f"[{platform_name}] order success! Please checkout and pay ASAP"
+    else:
+        message = f"[{platform_name}] notification"
+
+    return message
+
+
+def send_telegram_message(
+    bot_token: str,
+    chat_id: str,
+    stage: str,
+    platform_name: str,
+    timeout: float = 3.0,
+    verbose: bool = False,
+    custom_message: str = None
+) -> bool:
+    """
+    Send Telegram Bot notification (synchronous).
+
+    Args:
+        bot_token: Telegram Bot API token
+        chat_id: Comma-separated Telegram chat IDs (e.g., "123,456")
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+        timeout: Request timeout in seconds, default 3.0
+        verbose: Whether to print error messages
+        custom_message: User-defined message text; if non-empty, overrides default.
+
+    Returns:
+        bool: True if sent to at least one chat successfully, False otherwise
+    """
+    if not bot_token or not chat_id:
+        return False
+
+    chat_ids = [cid.strip() for cid in chat_id.split(",") if cid.strip()]
+    if not chat_ids:
+        return False
+
+    text = build_telegram_message(stage, platform_name, custom_message=custom_message)
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    debug = DebugLogger(enabled=verbose)
+    any_success = False
+    for cid in chat_ids:
+        try:
+            payload = {"chat_id": cid, "text": text}
+            response = requests.post(url, json=payload, timeout=timeout)
+            result = response.json()
+            if response.status_code == 200 and result.get("ok", False):
+                any_success = True
+            else:
+                desc = result.get("description", "HTTP %d" % response.status_code)
+                debug.log(f"[Telegram] Send to {cid} failed: {desc}")
+        except (requests.RequestException, ValueError) as exc:
+            safe_msg = str(exc).replace(bot_token, "***") if bot_token else str(exc)
+            debug.log(f"[Telegram] Send to {cid} failed: {safe_msg}")
+    return any_success
+
+
+def send_telegram_message_async(
+    bot_token: str,
+    chat_id: str,
+    stage: str,
+    platform_name: str,
+    timeout: float = 3.0,
+    verbose: bool = False,
+    custom_message: str = None
+) -> None:
+    """
+    Send Telegram Bot notification asynchronously.
+
+    Uses a daemon thread to send without blocking the main flow.
+
+    Args:
+        bot_token: Telegram Bot API token
+        chat_id: Comma-separated Telegram chat IDs (e.g., "123,456")
+        stage: Notification stage ("ticket" or "order")
+        platform_name: Platform name (e.g., "TixCraft", "iBon")
+        timeout: Request timeout in seconds, default 3.0
+        verbose: Whether to print error messages
+        custom_message: User-defined message text; if non-empty, overrides default.
+    """
+    if not bot_token or not chat_id:
+        return
+
+    thread = threading.Thread(
+        target=send_telegram_message,
+        args=(bot_token, chat_id, stage, platform_name),
+        kwargs={"timeout": timeout, "verbose": verbose, "custom_message": custom_message},
         daemon=True
     )
     thread.start()
@@ -2552,3 +2529,131 @@ async def verify_cf_with_templates(tab, templates: list = None, show_debug: bool
     if show_debug:
         print("[CF] All templates failed")
     return False
+
+
+# ============================================================
+# ibon live.map - skip area selection page (fast-path)
+# Ref: docs/13-platform-research/ibon-livemap-optimization.md
+# ============================================================
+
+IBON_LIVEMAP_CDN_BASE = "https://qwareticket-asysimg.azureedge.net/QWARE_TICKET/images/Temp"
+IBON_ORDER_BASE_URL = "https://orders.ibon.com.tw/application/UTK02/"
+
+
+def ibon_fetch_and_parse_livemap(performance_id, debug=None):
+    """Fetch ibon live.map from Azure CDN and parse area data.
+
+    Returns list of area dicts or empty list on failure.
+    Each dict: page_name, performance_id, area_id, group_id,
+               area_name, price (int), remaining (int).
+    """
+    areas = []
+    url = f"{IBON_LIVEMAP_CDN_BASE}/{performance_id}/1_{performance_id}_live.map"
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=3)
+        if resp.status_code != 200:
+            if debug:
+                debug.log(f"[IBON LIVEMAP] HTTP {resp.status_code} for {performance_id}")
+            return areas
+        resp.encoding = 'utf-8'
+        content = resp.text
+    except Exception as exc:
+        if debug:
+            debug.log(f"[IBON LIVEMAP] Request failed: {exc}")
+        return areas
+
+    send_pattern = r"Send\('(\d+)',\s*'([^']+)',\s*'([^']+)',\s*'([^']*)'\)"
+    title_pattern = r'title="[^:]+:([^"]*?)\s+\u7968\u50f9[\uff1a:]([^\s]+)\s+\u5c1a\u9918[\uff1a:](\d+)"'
+
+    for area_match in re.finditer(r'<area[^>]+>', content):
+        area_html = area_match.group()
+        send_match = re.search(send_pattern, area_html)
+        title_match = re.search(title_pattern, area_html)
+        if send_match and title_match:
+            try:
+                price_str = title_match.group(2).replace(',', '')
+                price = int(price_str)
+                remaining = int(title_match.group(3))
+            except (ValueError, IndexError):
+                continue
+
+            areas.append({
+                'page_name': send_match.group(1),
+                'performance_id': send_match.group(2),
+                'area_id': send_match.group(3),
+                'group_id': send_match.group(4),
+                'area_name': title_match.group(1).strip(),
+                'price': price,
+                'remaining': remaining,
+            })
+
+    if debug:
+        debug.log(f"[IBON LIVEMAP] Parsed {len(areas)} areas for {performance_id}")
+
+    return areas
+
+
+def ibon_livemap_select_area(livemap_areas, config_dict, area_keyword_item, debug=None):
+    """Select best area from live.map data based on config filters.
+
+    Applies: remaining >= ticket_number, keyword_exclude, keyword match,
+    then auto_select_mode (top/bottom/center/random).
+
+    Returns selected area dict or None.
+    """
+    ticket_number = config_dict["ticket_number"]
+    auto_select_mode = config_dict["area_auto_select"]["mode"]
+
+    matched = []
+    for area in livemap_areas:
+        area_label = f"{area['area_name']} | price={area['price']} | remaining={area['remaining']}"
+
+        if area['remaining'] < ticket_number:
+            if debug:
+                debug.log(f"[IBON LIVEMAP] {area_label} -> skip: insufficient (need {ticket_number})")
+            continue
+
+        row_text = area['area_name'] + ' ' + str(area['price'])
+
+        if reset_row_text_if_match_keyword_exclude(config_dict, row_text):
+            if debug:
+                debug.log(f"[IBON LIVEMAP] {area_label} -> skip: excluded by keyword")
+            continue
+
+        if area_keyword_item and len(area_keyword_item) > 0:
+            keyword_clean = area_keyword_item.strip()
+            if keyword_clean.startswith('"') and keyword_clean.endswith('"'):
+                keyword_clean = keyword_clean[1:-1]
+
+            sub_keywords = [kw.strip() for kw in keyword_clean.split(' ') if kw.strip()]
+            if not all(sub_kw in row_text for sub_kw in sub_keywords):
+                if debug:
+                    debug.log(f"[IBON LIVEMAP] {area_label} -> skip: keyword mismatch (need: {keyword_clean})")
+                continue
+
+        if debug:
+            debug.log(f"[IBON LIVEMAP] {area_label} -> MATCHED")
+        matched.append(area)
+
+    return get_target_item_from_matched_list(matched, auto_select_mode)
+
+
+def ibon_build_skip_url(area_dict):
+    """Build ibon direct navigation URL from live.map area data.
+
+    Two patterns based on page_name:
+      != '0205' -> UTK{page_name}_.aspx?...
+      == '0205' -> UTK0201_001.aspx?...
+    """
+    page_name = area_dict['page_name']
+    perf_id = area_dict['performance_id']
+    area_id = area_dict['area_id']
+    group_id = area_dict['group_id']
+
+    if page_name != '0205':
+        path = f"UTK{page_name}_.aspx?PERFORMANCE_ID={perf_id}&GROUP_ID={group_id}&PERFORMANCE_PRICE_AREA_ID={area_id}"
+    else:
+        path = f"UTK0201_001.aspx?PERFORMANCE_ID={perf_id}&GROUP_ID={group_id}&PERFORMANCE_PRICE_AREA_ID={area_id}"
+
+    return IBON_ORDER_BASE_URL + path

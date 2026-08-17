@@ -23,13 +23,13 @@
 
 Tickets Hunter 是一個開放原始碼的多平台搶票自動化系統，支援台灣及海外主要票務網站。
 
-**🤖 技術特色**：本專案為學術性質研究，僅透過純自然語言與 [Claude Code](https://claude.ai/code) AI 進行開發與維護，展現 AI 輔助軟體工程的實踐成果。
+**🤖 技術特色**：本專案是一項 AI 輔助軟體工程實驗 — 主要透過自然語言指令與 [Claude Code](https://claude.ai/code) 及 [Codex](https://openai.com/codex/get-started/) 協作進行開發、除錯與維護，不手寫任何程式碼。從架構設計、功能實作到 PR 審查，皆由 AI 協助完成。
+
+> **🔬 對 AI 開發有興趣？** 歡迎 Fork 本專案，嘗試使用不同的 AI / LLM 工具（如 Claude Code、[Codex](https://openai.com/codex/get-started/)、GitHub Copilot、Cursor、Windsurf、Cline 等）進行開發與研究學習，探索各種 AI 輔助開發的可能性！
 
 ### 🎪 平台支援狀態
 
-✅ **NoDriver 完全支援**：TixCraft、Teamear、TicketMaster、Indievox、KKTIX、TicketPlus、iBon、年代售票、寬宏售票、Cityline 買飛、HKTicketing 快達票、KHAM、FamiTicket、FANSI GO
-
-> **📢 策略**：建議優先使用 NoDriver 版本，Chrome/Selenium 已進入維護模式（視情況修復錯誤）
+✅ **NoDriver 完全支援**：TixCraft、Teamear、TicketMaster、Indievox、KKTIX、TicketPlus、iBon、年代售票、寬宏售票、Cityline 買飛、HKTicketing 快達票、KHAM、FamiTicket、FANSI GO、FunOne
 
 ---
 
@@ -129,15 +129,25 @@ Tickets Hunter 是一個開放原始碼的多平台搶票自動化系統，支�
 tickets_hunter/
 ├── 📦 src/                      # 原始碼目錄
 │   ├── 🎯 核心搶票引擎
-│   │   ├── chrome_tixcraft.py      # Selenium WebDriver 主引擎 
-│   │   ├── nodriver_tixcraft.py    # NoDriver 反偵測引擎
-│   │   └── util.py                 # 共用函式庫與平台抽象層
+│   │   ├── nodriver_tixcraft.py    # 主迴圈與 URL 路由（zendriver）
+│   │   ├── nodriver_common.py      # 共用瀏覽器基礎設施（DOM 工具、Cloudflare）
+│   │   ├── platforms/              # 各平台獨立模組
+│   │   │   ├── tixcraft.py         # TixCraft / TicketMaster / Teamear / Indievox
+│   │   │   ├── kktix.py            # KKTIX
+│   │   │   ├── ibon.py             # iBon / 年代售票
+│   │   │   ├── ticketplus.py       # TicketPlus
+│   │   │   ├── famiticket.py       # FamiTicket
+│   │   │   ├── kham.py             # 寬宏售票
+│   │   │   ├── fansigo.py          # FANSI GO
+│   │   │   ├── cityline.py         # Cityline 買飛
+│   │   │   ├── hkticketing.py      # HKTicketing 快達票
+│   │   │   ├── funone.py           # FunOne
+│   │   │   └── facebook.py         # Facebook 登入輔助
+│   │   └── util.py                 # 純工具函式（文字比對、關鍵字解析、DebugLogger）
 │   ├── ⚙️ 設定介面
-│   │   ├── settings.py             # 現代網頁設定介面
-│   │   └── config_launcher.py      # 多設定檔管理器
+│   │   └── settings.py             # 現代網頁設定介面
 │   ├── 📋 設定檔
-│   │   ├── settings.json           # 主要設定檔 (搶票參數)
-│   │   └── config_launcher.json    # 多設定檔清單
+│   │   └── settings.json           # 主要設定檔 (搶票參數)
 │   ├── 🌐 網頁介面                   # Web UI 資源
 │   │   └── www/
 │   │       ├── settings.html       # 設定介面前端
@@ -145,10 +155,6 @@ tickets_hunter/
 │   │       ├── css/                # 樣式表
 │   │       ├── dist/               # 編譯後檔案
 │   │       └── icons/              # 圖示資源
-│   ├── 🔌 瀏覽器擴充套件              # Chrome Extension
-│   │   └── webdriver/
-│   │       ├── Maxblockplus_1.0.0/ # 廣告阻擋擴充套件
-│   │       └── Maxbotplus_1.0.0/   # DOM 操作輔助擴充套件
 │   └── 🔧 輔助工具
 │       ├── NonBrowser.py           # 非瀏覽器模式處理
 │       └── assets/                 # 資源檔案
@@ -164,7 +170,13 @@ tickets_hunter/
 ---
 
 ## ⭐ Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=bouob/tickets_hunter&type=date&legend=top-left)](https://www.star-history.com/#bouob/tickets_hunter&type=date&legend=top-left)
+<a href="https://www.star-history.com/#bouob/tickets_hunter&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=bouob/tickets_hunter&type=Date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=bouob/tickets_hunter&type=Date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=bouob/tickets_hunter&type=Date&legend=top-left" />
+  </picture>
+</a>
 
 ---
 

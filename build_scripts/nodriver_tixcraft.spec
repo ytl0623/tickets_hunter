@@ -19,12 +19,9 @@ ddddocr_datas = collect_data_files('ddddocr')
 
 a = Analysis(
     [os.path.join(project_root, 'src', 'nodriver_tixcraft.py')],
-    pathex=[],
+    pathex=[os.path.join(project_root, 'src')],
     binaries=[],
     datas=[
-        # Only include extension directories, not auto-downloaded Chrome
-        (os.path.join(project_root, 'src', 'webdriver', 'Maxbotplus_1.0.0'), os.path.join('webdriver', 'Maxbotplus_1.0.0')),
-        (os.path.join(project_root, 'src', 'webdriver', 'Maxblockplus_1.0.0'), os.path.join('webdriver', 'Maxblockplus_1.0.0')),
         (os.path.join(project_root, 'src', 'assets'), 'assets'),
         (os.path.join(project_root, 'src', 'www'), 'www'),
         # settings.json excluded - program generates it automatically
@@ -35,13 +32,27 @@ a = Analysis(
         'ddddocr',
         'onnxruntime',
         'onnxruntime.capi.onnxruntime_pybind11_state',
-        'nodriver',
-        'nodriver.cdp',
-        'nodriver.core',
+        'zendriver',
+        'zendriver.cdp',
+        'zendriver.core',
         # Shared utilities (important!)
         'util',
         'NonBrowser',
         'chrome_downloader',
+        # Modular architecture
+        'nodriver_common',
+        'platforms',
+        'platforms.facebook',
+        'platforms.fansigo',
+        'platforms.cityline',
+        'platforms.famiticket',
+        'platforms.ticketplus',
+        'platforms.funone',
+        'platforms.kktix',
+        'platforms.tixcraft',
+        'platforms.ibon',
+        'platforms.kham',
+        'platforms.hkticketing',
         # Chrome downloader dependencies
         'requests',
         # Image processing
@@ -49,10 +60,6 @@ a = Analysis(
         'PIL.Image',
         'cv2',
         'numpy',
-        # Web automation
-        'selenium',
-        'selenium.webdriver',
-        'selenium.webdriver.common.by',
         # Network
         'urllib3',
         'certifi',

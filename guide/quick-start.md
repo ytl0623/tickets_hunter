@@ -2,8 +2,8 @@
 文件說明：協助使用者在 5 分鐘內完成第一次搶票設定
 分類：Getting Started (level: 1)
 目標受眾：初學者
-版本：1.2
-最後更新：2025-11-12
+版本：1.3
+最後更新：2026-06-10
 -->
 
 # 快速入門指南
@@ -25,7 +25,7 @@
 ## 📋 前置準備
 
 ### 1. 確認已安裝
-- Python 3.9-3.11（建議使用 3.10）
+- Python 3.10-3.11（建議使用 3.10；3.12 僅部分支援，3.13 以上不支援）
 - Chrome 瀏覽器
 - Tickets Hunter 程式 (已下載或 git clone)
 
@@ -48,7 +48,7 @@ pip install -r requirement.txt
 
 執行指令前請先確認工作目錄：
 - **根目錄** (`tickets_hunter/`)：執行 pip install、git pull 等全域指令
-- **原始碼目錄** (`tickets_hunter/src/`)：執行 Python 腳本（settings.py、config_launcher.py 等）
+- **原始碼目錄** (`tickets_hunter/src/`)：執行 Python 腳本（settings.py 等）
 
 **範例**：
 ```bash
@@ -107,21 +107,7 @@ https://kktix.com/events/example-event
 
 ---
 
-#### 2.3 搶票引擎 (webdriver_type)
-選擇使用哪種搶票引擎。
-
-**在圖形介面中顯示為**：`WebDriver類別`
-
-**推薦設定**：nodriver
-
-**可選值**：
-- nodriver - **推薦**，反偵測能力最強
-- undetected_chromedriver - 舊版回退
-- selenium - 標準模式（較容易被偵測）
-
----
-
-#### 2.4 日期關鍵字
+#### 2.3 日期關鍵字
 
 填寫想選擇的日期文字，例如：`11/16;11/17;週六`
 
@@ -132,7 +118,7 @@ https://kktix.com/events/example-event
 
 ---
 
-#### 2.5 區域關鍵字
+#### 2.4 區域關鍵字
 
 填寫想選擇的區域文字，例如：`搖滾A;VIP;3,280`
 
@@ -143,7 +129,7 @@ https://kktix.com/events/example-event
 
 ---
 
-#### 2.6 排除關鍵字
+#### 2.5 排除關鍵字
 
 排除不想選的區域：`輪椅;身障;視線不良`
 
@@ -358,7 +344,7 @@ python --version
 1. **調慢刷新速度**：在圖形介面的「進階設定」頁籤中，增加「自動刷新間隔秒數」
    - 建議設定為 **3-5 秒**（預設可能太快）
 2. **等待後重試**：被阻擋後等待 1-2 分鐘再繼續
-3. **避免多開**：不要同時開啟多個搶票視窗
+3. **避免同場次多開**：同一活動、同帳號開多個視窗會互相干擾，甚至被平台踢登入；若要同時搶**不同場次或平台**，請改用多開實例功能（見[設定指南](settings-guide.md)的「多開實例」）
 4. **清除瀏覽器快取**：有時快取會導致異常
 
 **設定位置**：
@@ -378,12 +364,12 @@ python --version
 
 **方法 1：降級 Python 版本（推薦）**
 ```bash
-# 安裝 Python 3.10（推薦）或 3.11/3.12
+# 安裝 Python 3.10（推薦）或 3.11
 # 下載網址：https://www.python.org/downloads/
 
 # 確認版本
 python --version
-# 應顯示 Python 3.10.x 或 3.11.x 或 3.12.x
+# 應顯示 Python 3.10.x 或 3.11.x
 ```
 
 **方法 2：Apple Silicon Mac 用戶**

@@ -93,7 +93,15 @@
 <body>
   <div class="container py-4">
   <div id="message"></div>
-  <h2>Tickets Hunter <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" class="bi bi-ticket-perforated" viewBox="0 0 16 16" style="vertical-align: -0.125em;"><path d="M4 4.85v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9z"/><path d="M1.5 3A1.5 1.5 0 0 0 0 4.5V6a.5.5 0 0 0 .5.5 1.5 1.5 0 1 1 0 3 .5.5 0 0 0-.5.5v1.5A1.5 1.5 0 0 0 1.5 13h13a1.5 1.5 0 0 0 1.5-1.5V10a.5.5 0 0 0-.5-.5 1.5 1.5 0 0 1 0-3A.5.5 0 0 0 16 6V4.5A1.5 1.5 0 0 0 14.5 3zM1 4.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v1.05a2.5 2.5 0 0 0 0 4.9v1.05a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-1.05a2.5 2.5 0 0 0 0-4.9z"/></svg> - 多平台搶票自動化系統</h2>
+  <h2 id="page_title">Tickets Hunter <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" class="bi bi-ticket-perforated" viewBox="0 0 16 16" style="vertical-align: -0.125em;"><path d="M4 4.85v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9zm-7 1.8v.9h1v-.9zm7 0v.9h1v-.9z"/><path d="M1.5 3A1.5 1.5 0 0 0 0 4.5V6a.5.5 0 0 0 .5.5 1.5 1.5 0 1 1 0 3 .5.5 0 0 0-.5.5v1.5A1.5 1.5 0 0 0 1.5 13h13a1.5 1.5 0 0 0 1.5-1.5V10a.5.5 0 0 0-.5-.5 1.5 1.5 0 0 1 0-3A.5.5 0 0 0 16 6V4.5A1.5 1.5 0 0 0 14.5 3zM1 4.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v1.05a2.5 2.5 0 0 0 0 4.9v1.05a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-1.05a2.5 2.5 0 0 0 0-4.9z"/></svg> - 多平台搶票自動化系統</h2>
+  <!-- Instance profile bar: one pill per profile (= one bot instance config) -->
+  <div class="d-flex align-items-center flex-wrap mb-2" id="profile_bar">
+    <span class="me-2 text-muted small">實例設定檔：</span>
+    <ul class="nav nav-pills flex-nowrap" id="profile_tabs" style="overflow-x:auto;"></ul>
+    <button type="button" class="btn btn-sm btn-outline-success ms-2" id="profile_add_btn"
+            onclick="show_profile_modal()" title="新增實例設定檔（選擇平台）">＋ 新增</button>
+    <span id="profile_warnings" class="d-flex flex-wrap gap-1 ms-2"></span>
+  </div>
   <div class="row g-3">
     <ul class="nav nav-tabs" id="myTab" role="tablist">
       <li class="nav-item" role="presentation">
@@ -130,6 +138,14 @@
       </li>
 
       <li class="nav-item ms-3 d-flex align-items-center" role="presentation">
+        <label for="language_selector" class="form-label mb-0 me-2">語言</label>
+        <select id="language_selector" class="form-select form-select-sm" style="width: auto;">
+          <option value="zh-TW">繁體中文</option>
+          <option value="en">English</option>
+        </select>
+      </li>
+
+      <li class="nav-item ms-3 d-flex align-items-center" role="presentation">
         <div class="form-check form-switch mb-0">
           <input class="form-check-input" type="checkbox" id="dark_mode_toggle">
           <label class="form-check-label" for="dark_mode_toggle">
@@ -144,7 +160,7 @@
 
 <!-- 版本資訊 -->
 <div class="alert alert-info" role="alert">
-  <p class="mb-0"><strong>版本</strong>：Tickets Hunter (2026.02.09) | <strong>技術支援</strong>：Claude Code AI 輔助開發</p>
+  <p class="mb-0"><strong>版本</strong>：Tickets Hunter (2026.08.07) | <strong>技術支援</strong>：Claude Code AI 輔助開發</p>
 </div>
 
 <!-- 開發狀態提示（可展開） -->
@@ -226,7 +242,7 @@
       <!-- tab 2 -->
       <div class="tab-pane fade" id="home-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
         <div class="row mb-3">
-          <label for="homepage" class="col-sm-2 col-form-label">網址</label>
+          <label for="homepage" class="col-sm-2 col-form-label">網址<span class="help-icon" data-help="homepage" title="售票網站說明" tabindex="0" role="button" aria-label="售票網站 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="homepage" value="" />
 
@@ -259,7 +275,7 @@
                     <div class="mb-0">
                       <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://ticket.urbtix.hk')">Urbtix 城市</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.cityline.com')">Cityline 買飛</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://hkticketing.com')">HKTicketing 快達票</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://hotshow.hkticketing.com/')">HKTicketing 快達票</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.galaxymacau.com')">澳門銀河</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.ticketmaster.sg')">TicketMaster Singapore</button>
                       <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" onclick="fillHomepage('https://www.ticketek.com.au')">Ticketek Australia</button>
@@ -272,6 +288,7 @@
             <script>
             function fillHomepage(url) {
               document.getElementById('homepage').value = url;
+              updatePlatformFields(url);
             }
             </script>
 
@@ -279,27 +296,20 @@
         </div>
 
         <div class="row mb-3 disappear" data-under="kktix">
-          <label class="col-sm-2 col-form-label form-check-label" for="auto_press_next_step_button">KKTIX點選下一步按鈕</label>
+          <label class="col-sm-2 col-form-label form-check-label">KKTIX點選下一步按鈕<span class="help-icon" data-help="auto_press_next_step_button" title="KKTIX 點選下一步按鈕說明" tabindex="0" role="button" aria-label="KKTIX 點選下一步按鈕 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-check-input" type="checkbox" id="auto_press_next_step_button" />
           </div>
         </div>
         <div class="row mb-3 disappear" data-under="kktix">
-          <label for="max_dwell_time" class="col-sm-2 col-form-label">KKTIX購票最長停留(秒)</label>
+          <label for="max_dwell_time" class="col-sm-2 col-form-label">KKTIX購票最長停留(秒)<span class="help-icon" data-help="max_dwell_time" title="KKTIX 購票最長停留說明" tabindex="0" role="button" aria-label="KKTIX 購票最長停留 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="max_dwell_time" value="" />
           </div>
         </div>
 
-        <div class="row mb-3 bd-callout bd-callout-info disappear" data-under="cityline">
-          <div class="col">
-              <strong>備註：</strong>
-                Cityline 只能使用 <code>chrome 瀏覽器</code> + <code>nodriver</code>。
-          </div>
-        </div>
-
         <div class="row mb-3">
-          <label for="ticket_number" class="col-sm-2 col-form-label">張數</label>
+          <label for="ticket_number" class="col-sm-2 col-form-label">張數<span class="help-icon" data-help="ticket_number" title="張數說明" tabindex="0" role="button" aria-label="張數 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <select id="ticket_number" class="form-select" aria-label="Default select">
               <option selected="selected">
@@ -340,17 +350,15 @@
         </div>
 
         <div class="row mb-3">
-          <label for="refresh_datetime" class="col-sm-2 col-form-label">刷新在指定時間
-            <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-              title="時間格式 HH:MM:SS (小時:分鐘:秒數)。在設定介面修改並存檔，並不會套用在「已經」開出的瀏覽器，只會套用在存檔之後按「搶票」所開出的瀏覽器。">?</span>
+          <label for="refresh_datetime" class="col-sm-2 col-form-label">刷新在指定時間<span class="help-icon" data-help="refresh_datetime" title="刷新在指定時間說明" tabindex="0" role="button" aria-label="刷新在指定時間 說明"></span>
           </label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
-            <input class="form-control" id="refresh_datetime" value="" />
+            <input class="form-control" id="refresh_datetime" value="" placeholder="YYYY/MM/DD HH:MM:SS" />
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="date_select_mode" class="col-sm-2 col-form-label">日期排序方式</label>
+          <label for="date_select_mode" class="col-sm-2 col-form-label">日期排序方式<span class="help-icon" data-help="date_select_mode" title="日期排序方式說明" tabindex="0" role="button" aria-label="日期排序方式 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <select id="date_select_mode" class="form-select" aria-label="Default select">
               <option value="from top to bottom">
@@ -369,7 +377,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label for="date_keyword" class="col-sm-2 col-form-label">日期關鍵字</label>
+          <label for="date_keyword" class="col-sm-2 col-form-label">日期關鍵字<span class="help-icon" data-help="date_keyword" title="日期關鍵字說明" tabindex="0" role="button" aria-label="日期關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <textarea class="form-control" id="date_keyword" rows="3"></textarea>
 
@@ -398,20 +406,16 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">日期自動遞補</label>
+          <label class="col-sm-2 col-form-label">日期自動遞補<span class="help-icon" data-help="date_auto_fallback" title="日期自動遞補說明" tabindex="0" role="button" aria-label="日期自動遞補 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="date_auto_fallback">
-              <label class="form-check-label" for="date_auto_fallback">
-                當所有日期關鍵字都未匹配時，自動選擇可用日期
-                <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-                  title="啟用後，若所有日期關鍵字都未匹配，系統會根據「日期排序方式」自動選擇可用日期。預設為關閉（嚴格模式），避免誤購不想要的票券。">?</span>
-              </label>
+              <label class="form-check-label" for="date_auto_fallback">啟用</label>
             </div>
           </div>
         </div>
         <div class="row mb-3">
-          <label for="area_select_mode" class="col-sm-2 col-form-label">區域排序方式</label>
+          <label for="area_select_mode" class="col-sm-2 col-form-label">區域排序方式<span class="help-icon" data-help="area_select_mode" title="區域排序方式說明" tabindex="0" role="button" aria-label="區域排序方式 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <select id="area_select_mode" class="form-select" aria-label="Default select">
               <option value="from top to bottom">
@@ -430,7 +434,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label for="area_keyword" class="col-sm-2 col-form-label">區域關鍵字</label>
+          <label for="area_keyword" class="col-sm-2 col-form-label">區域關鍵字<span class="help-icon" data-help="area_keyword" title="區域關鍵字說明" tabindex="0" role="button" aria-label="區域關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <textarea class="form-control" id="area_keyword" rows="3"></textarea>
             <div class="accordion mt-1" id="accordionAreaLogic">
@@ -456,22 +460,16 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">區域自動遞補</label>
+          <label class="col-sm-2 col-form-label">區域自動遞補<span class="help-icon" data-help="area_auto_fallback" title="區域自動遞補說明" tabindex="0" role="button" aria-label="區域自動遞補 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="area_auto_fallback">
-              <label class="form-check-label" for="area_auto_fallback">
-                當所有區域關鍵字都未匹配時，自動選擇可用區域
-                <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-                  title="啟用後，若所有區域關鍵字都未匹配，系統會根據「區域排序方式」自動選擇可用區域。預設為關閉（嚴格模式），避免誤購不想要的票券。">?</span>
-              </label>
+              <label class="form-check-label" for="area_auto_fallback">啟用</label>
             </div>
           </div>
         </div>
         <div class="row">
-          <label for="keyword_exclude" class="col-sm-2 col-form-label">排除關鍵字
-            <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-              title="多組關鍵字使用「分號」分隔（OR 邏輯），關鍵字內部使用「空格」為 AND 邏輯。例如：輪椅;身障 或 搖滾A 前排;VIP。留空代表不排除任何關鍵字。">?</span>
+          <label for="keyword_exclude" class="col-sm-2 col-form-label">排除關鍵字<span class="help-icon" data-help="keyword_exclude" title="排除關鍵字說明" tabindex="0" role="button" aria-label="排除關鍵字 說明"></span>
           </label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <textarea class="form-control" id="keyword_exclude" rows="3"></textarea>
@@ -487,33 +485,9 @@
       <!-- tab 3 -->
       <div class="tab-pane fade" id="advanced-tab-pane" role="tabpanel" aria-labelledby="advanced-tab" tabindex="1">
 
-        <div class="row mb-3">
-          <label for="browser" class="col-sm-2 col-form-label">瀏覽器</label>
-          <div class="col-sm-10 col-lg-8 col-xl-6">
-            <select id="browser" class="form-select" aria-label="Default select">
-              <option value="chrome">Google Chrome ★</option>
-              <option value="edge">Microsoft Edge</option>
-              <option value="brave">Brave</option>
-              <option value="firefox">Firefox</option>
-              <option value="safari">Safari</option>
-            </select>
-          </div>
-        </div>
 
         <div class="row mb-3">
-          <label for="webdriver_type" class="col-sm-2 col-form-label">WebDriver類別</label>
-          <div class="col-sm-10 col-lg-8 col-xl-6">
-            <select id="webdriver_type" class="form-select" aria-label="Default select">
-              <option value="selenium">Selenium</option>
-              <option value="undetected_chromedriver">Undetected Chromedriver</option>
-              <option value="nodriver">Nodriver ★</option>
-              <!-- option value="DrissionPage">DrissionPage</option -->
-            </select>
-          </div>
-        </div>
-
-        <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">有票時播放音效</label>
+          <label class="col-sm-2 col-form-label">有票時播放音效<span class="help-icon" data-help="play_ticket_sound" title="有票時播放音效說明" tabindex="0" role="button" aria-label="有票時播放音效 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="play_ticket_sound">
@@ -522,7 +496,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">訂購時播放音效</label>
+          <label class="col-sm-2 col-form-label">訂購時播放音效<span class="help-icon" data-help="play_order_sound" title="訂購時播放音效說明" tabindex="0" role="button" aria-label="訂購時播放音效 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="play_order_sound">
@@ -532,24 +506,52 @@
         </div>
 
         <div class="row mb-3">
-          <label for="play_sound_filename" class="col-sm-2 col-form-label">音效檔</label>
+          <label for="play_sound_filename" class="col-sm-2 col-form-label">音效檔<span class="help-icon" data-help="play_sound_filename" title="音效檔說明" tabindex="0" role="button" aria-label="音效檔 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="play_sound_filename" value="" />
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="discord_webhook_url" class="col-sm-2 col-form-label">Discord Webhook URL
-            <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-              title="Discord Webhook 通知網址。留空則停用。設定後，當找到票券或訂單成功時，將會發送 Discord 通知。">?</span>
+          <label for="discord_webhook_url" class="col-sm-2 col-form-label">Discord Webhook URL<span class="help-icon" data-help="discord_webhook_url" title="Discord Webhook 通知說明" tabindex="0" role="button" aria-label="Discord Webhook URL 說明"></span>
           </label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
-            <input class="form-control" id="discord_webhook_url" type="url" value="" placeholder="https://discord.com/api/webhooks/..." />
+            <div class="input-group">
+              <input class="form-control" id="discord_webhook_url" type="url" value="" placeholder="https://discord.com/api/webhooks/..." />
+              <button class="btn btn-outline-secondary" type="button" id="btn_test_discord_webhook">測試</button>
+            </div>
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="auto_reload_page_interval" class="col-sm-2 col-form-label">自動刷新頁面間隔(秒)</label>
+          <label for="telegram_bot_token" class="col-sm-2 col-form-label">Telegram Bot Token<span class="help-icon" data-help="telegram_bot_token" title="Telegram Bot Token 說明" tabindex="0" role="button" aria-label="Telegram Bot Token 說明"></span>
+          </label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <input class="form-control" id="telegram_bot_token" type="password" autocomplete="off" value="" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" />
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <label for="telegram_chat_id" class="col-sm-2 col-form-label">Telegram Chat ID<span class="help-icon" data-help="telegram_chat_id" title="Telegram Chat ID 說明" tabindex="0" role="button" aria-label="Telegram Chat ID 說明"></span>
+          </label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <div class="input-group">
+              <input class="form-control" id="telegram_chat_id" type="text" value="" placeholder="123456789, 987654321" />
+              <button class="btn btn-outline-secondary" type="button" id="btn_test_telegram">測試</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <label for="notification_message" class="col-sm-2 col-form-label">通知訊息</label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <textarea class="form-control" id="notification_message" rows="2" placeholder="留空使用預設英文通知"></textarea>
+            <small class="form-text text-muted">搶到票時會將此訊息同時送到 Discord 與 Telegram。留空則維持原預設訊息。</small>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <label for="auto_reload_page_interval" class="col-sm-2 col-form-label">自動刷新頁面間隔(秒)<span class="help-icon" data-help="auto_reload_page_interval" title="自動刷新頁面間隔說明" tabindex="0" role="button" aria-label="自動刷新頁面間隔 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="auto_reload_page_interval" value="" />
             <div class="alert alert-warning alert-dismissible fade mt-2" id="tixcraft-refresh-warning" role="alert" style="display: none;">
@@ -562,46 +564,54 @@
           </div>
         </div>
 
+        <div class="row mb-3 disappear" id="tixcraft-soft-block-delay-row" data-under="tixcraft">
+          <label for="tixcraft_soft_block_delay" class="col-sm-2 col-form-label">暫時鎖定等待秒數<span class="help-icon" data-help="tixcraft_soft_block_delay" title="暫時鎖定等待秒數說明" tabindex="0" role="button" aria-label="暫時鎖定等待秒數 說明"></span></label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <input class="form-control" id="tixcraft_soft_block_delay" type="number" min="1" max="600" value="" placeholder="留空使用預設 240-420 秒" />
+            <small class="form-text text-muted">只影響拓元、添翼、Indievox 白畫面暫時鎖定等待時間。留空沿用預設值。</small>
+          </div>
+        </div>
+
+        <div class="row mb-3 disappear" id="tixcraft-allow-less-tickets-row" data-under="tixcraft">
+          <label class="col-sm-2 col-form-label">不足張數仍購買<span class="help-icon" data-help="tixcraft_allow_less_tickets" title="不足張數仍購買說明" tabindex="0" role="button" aria-label="不足張數仍購買 說明"></span></label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="tixcraft_allow_less_tickets">
+              <label class="form-check-label" for="tixcraft_allow_less_tickets">啟用</label>
+            </div>
+            <small class="form-text text-muted">影響拓元、添翼、Indievox 與 Ticketmaster。開啟後，若設定張數不可選，會改買小於設定張數的最大可用張數。</small>
+          </div>
+        </div>
+
 
         <div class="row mb-3">
-          <label for="reset_browser_interval" class="col-sm-2 col-form-label">重新啟動瀏覽器間隔(秒)</label>
+          <label for="reset_browser_interval" class="col-sm-2 col-form-label">重新啟動瀏覽器間隔(秒)<span class="help-icon" data-help="reset_browser_interval" title="重新啟動瀏覽器間隔說明" tabindex="0" role="button" aria-label="重新啟動瀏覽器間隔 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="reset_browser_interval" value="" />
           </div>
         </div>
         <div class="row mb-3">
-          <label for="server_port" class="col-sm-2 col-form-label">設定介面 Port
-            <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top"
-              title="設定介面的 Web Server 連接埠。預設為 16888。若遇到 Port 被系統阻擋或佔用，可修改為其他可用 Port（建議範圍：16000-17000）。修改後需重新啟動設定介面才會生效。">?</span>
+          <label for="server_port" class="col-sm-2 col-form-label">設定介面 Port<span class="help-icon" data-help="server_port" title="設定介面 Port 說明" tabindex="0" role="button" aria-label="設定介面 Port 說明"></span>
           </label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="server_port" type="number" min="1024" max="65535" value="" placeholder="16888" />
           </div>
         </div>
         <div class="row mb-3">
-          <label for="proxy_server_port" class="col-sm-2 col-form-label">Proxy IP:PORT</label>
+          <label for="proxy_server_port" class="col-sm-2 col-form-label">Proxy IP:PORT<span class="help-icon" data-help="proxy_server_port" title="代理伺服器說明" tabindex="0" role="button" aria-label="代理伺服器 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="proxy_server_port" value="" />
           </div>
         </div>
         <div class="row mb-3">
-          <label for="window_size" class="col-sm-2 col-form-label">瀏覽器視窗大小</label>
+          <label for="window_size" class="col-sm-2 col-form-label">瀏覽器視窗大小<span class="help-icon" data-help="window_size" title="瀏覽器視窗大小說明" tabindex="0" role="button" aria-label="瀏覽器視窗大小 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="window_size" value="" />
           </div>
         </div>
 
-        <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">Chrome 瀏覽器擴充功能</label>
-          <div class="col-sm-10 col-lg-8 col-xl-6">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="chrome_extension">
-              <label class="form-check-label" for="chrome_extension">啟用</label>
-            </div>
-          </div>
-        </div>
-        <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">允許不連續座位</label>
+        <div class="row mb-3" data-under="tixcraft kham ticket udn">
+          <label class="col-sm-2 col-form-label">允許不連續座位<span class="help-icon" data-help="disable_adjacent_seat" title="停用相鄰座位說明" tabindex="0" role="button" aria-label="停用相鄰座位 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="disable_adjacent_seat">
@@ -610,7 +620,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">隱藏部份圖片</label>
+          <label class="col-sm-2 col-form-label">隱藏部份圖片<span class="help-icon" data-help="hide_some_image" title="隱藏部分圖片說明" tabindex="0" role="button" aria-label="隱藏部分圖片 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="hide_some_image">
@@ -618,8 +628,8 @@
             </div>
           </div>
         </div>
-        <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">擋掉 Facebook 連線</label>
+        <div class="row mb-3" data-under="tixcraft kktix">
+          <label class="col-sm-2 col-form-label">擋掉 Facebook 連線<span class="help-icon" data-help="block_facebook_network" title="封鎖 Facebook 網路說明" tabindex="0" role="button" aria-label="封鎖 Facebook 網路 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="block_facebook_network">
@@ -628,7 +638,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">無圖形界面模式</label>
+          <label class="col-sm-2 col-form-label">無圖形界面模式<span class="help-icon" data-help="headless" title="無圖形界面模式說明" tabindex="0" role="button" aria-label="無圖形界面模式 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="headless">
@@ -637,7 +647,7 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">輸出除錯訊息</label>
+          <label class="col-sm-2 col-form-label">輸出除錯訊息<span class="help-icon" data-help="verbose" title="輸出除錯訊息說明" tabindex="0" role="button" aria-label="輸出除錯訊息 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="verbose">
@@ -646,7 +656,16 @@
           </div>
         </div>
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">OCR</label>
+          <label class="col-sm-2 col-form-label">顯示時間戳記<span class="help-icon" data-help="show_timestamp" title="顯示時間戳記說明" tabindex="0" role="button" aria-label="顯示時間戳記 說明"></span></label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="show_timestamp">
+              <label class="form-check-label" for="show_timestamp">啟用</label>
+            </div>
+          </div>
+        </div>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label class="col-sm-2 col-form-label">OCR<span class="help-icon" data-help="ocr_captcha_enable" title="OCR 驗證碼辨識說明" tabindex="0" role="button" aria-label="OCR 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="ocr_captcha_enable">
@@ -655,8 +674,8 @@
           </div>
         </div>
 
-        <div class="row mb-3">
-          <label for="ocr_captcha_image_source" class="col-sm-2 col-form-label">OCR圖片取得方式</label>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label for="ocr_captcha_image_source" class="col-sm-2 col-form-label">OCR圖片取得方式<span class="help-icon" data-help="ocr_captcha_image_source" title="OCR 圖片取得方式說明" tabindex="0" role="button" aria-label="OCR 圖片取得方式 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <select id="ocr_captcha_image_source" class="form-select" aria-label="Default select">
               <option value="canvas">canvas</option>
@@ -664,8 +683,8 @@
             </select>
           </div>
         </div>
-        <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">自動送出</label>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label class="col-sm-2 col-form-label">自動送出<span class="help-icon" data-help="ocr_captcha_force_submit" title="OCR 自動送出說明" tabindex="0" role="button" aria-label="自動送出 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="ocr_captcha_force_submit">
@@ -673,14 +692,26 @@
             </div>
           </div>
         </div>
-        <div class="row mb-3">
-          <label for="remote_url" class="col-sm-2 col-form-label">OCR Server URL</label>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label class="col-sm-2 col-form-label">自訓練模型<span class="help-icon" data-help="ocr_captcha_use_universal" title="使用通用 OCR 模型說明" tabindex="0" role="button" aria-label="使用通用 OCR 模型 說明"></span></label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="ocr_captcha_use_universal">
+              <label class="form-check-label" for="ocr_captcha_use_universal">啟用</label>
+            </div>
+            <div class="form-text">
+              開啟後使用自訓練 OCR 模型辨識驗證碼，不使用 ddddocr 官方模型及 beta 設定。
+            </div>
+          </div>
+        </div>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label for="remote_url" class="col-sm-2 col-form-label">OCR Server URL<span class="help-icon" data-help="remote_url" title="設定介面網址說明" tabindex="0" role="button" aria-label="設定介面網址 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="remote_url" value="" />
           </div>
         </div>
-        <div class="row mb-3">
-          <label for="ocr_model_path" class="col-sm-2 col-form-label">自訂 OCR 模型</label>
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+          <label for="ocr_model_path" class="col-sm-2 col-form-label">自訂 OCR 模型<span class="help-icon" data-help="ocr_model_path" title="自訂 OCR 模型說明" tabindex="0" role="button" aria-label="自訂 OCR 模型 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="ocr_model_path" value="" placeholder="例如：assets/ocr_model 或 C:\models\my_ocr" />
             <div class="form-text">
@@ -694,7 +725,7 @@
       <div class="tab-pane fade" id="verification-tab-pane" role="tabpanel" aria-labelledby="verification-tab" tabindex="2">
 
         <div class="row mb-3">
-          <label for="user_guess_string" class="col-sm-2 col-form-label">使用者自定字典</label>
+          <label for="user_guess_string" class="col-sm-2 col-form-label">使用者自定字典<span class="help-icon" data-help="user_guess_string" title="使用者自定字典說明" tabindex="0" role="button" aria-label="使用者自定字典 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <textarea class="form-control" id="user_guess_string" rows="3" placeholder="多個答案請用分號分隔，例如：答案A;答案B;答案C"></textarea>
             <div class="form-text">
@@ -704,7 +735,7 @@
         </div>
 
         <div class="row mb-3">
-          <label class="col-sm-2 col-form-label">自動猜測驗證問題</label>
+          <label class="col-sm-2 col-form-label">自動猜測驗證問題<span class="help-icon" data-help="auto_guess_options" title="自動猜測驗證選項說明" tabindex="0" role="button" aria-label="自動猜測驗證選項 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="auto_guess_options">
@@ -713,6 +744,15 @@
             <div class="form-text">
               當未填寫「使用者自定字典」時，系統將嘗試從問題內容自動推測答案（如日期、時間等）。
             </div>
+          </div>
+        </div>
+
+        <!-- Phase 3: choose which instance's pending question to monitor -->
+        <div class="row mb-3" id="question-instance-row">
+          <label for="question-instance-select" class="col-sm-2 col-form-label">答題對象實例</label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <select class="form-select form-select-sm" id="question-instance-select" onchange="on_question_instance_change()"></select>
+            <div class="form-text">預設跟著目前分頁；可改為監看其他執行中實例的待答問題。</div>
           </div>
         </div>
 
@@ -785,11 +825,11 @@
 
         <!-- 優惠代碼 -->
         <div class="row mb-3">
-          <label for="discount_code" class="col-sm-2 col-form-label">優惠代碼</label>
+          <label for="discount_code" class="col-sm-2 col-form-label">優惠代碼<span class="help-icon" data-help="discount_code" title="優惠代碼說明" tabindex="0" role="button" aria-label="優惠代碼 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input type="text" id="discount_code" value="" class="form-control" placeholder="優惠序號 / 加購序號 / 會員序號">
             <small class="form-text text-muted">
-              適用於所有平台的優惠代碼（優惠序號、加購序號、會員序號等），程式會自動偵測並填入所有符合的輸入欄位。目前支援：TicketPlus、KKTIX
+              適用於所有平台的優惠代碼（優惠序號、加購序號、會員序號等），程式會自動偵測並填入所有符合的輸入欄位。目前支援：TicketPlus、KKTIX；亦作為 TixCraft 驗證題的最終 fallback（當「使用者自定字典」為空且「自動猜測驗證問題」未啟用時使用）。
             </small>
           </div>
         </div>
@@ -832,8 +872,8 @@
         <hr class="mb-4"/>
 
         <!-- 平台帳號區塊 -->
-        <div class="row mb-3">
-          <label for="tixcraft_sid" class="col-sm-2 col-form-label">拓元家族 cookie (TIXUISID / IVUISID / TIXPUISID)</label>
+        <div class="row mb-3" data-under="tixcraft">
+          <label for="tixcraft_sid" class="col-sm-2 col-form-label">拓元家族 cookie (TIXUISID / IVUISID / TIXPUISID)<span class="help-icon" data-help="tixcraft_sid" title="拓元家族 Cookie 說明" tabindex="0" role="button" aria-label="拓元家族 Cookie 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="tixcraft_sid" value="" />
             <div class="alert alert-warning alert-dismissible fade mt-2" id="tixcraft-sid-warning" role="alert" style="display: none;">
@@ -846,28 +886,42 @@
           </div>
         </div>
 
-        <div class="row mb-3">
-          <label for="ibonqware" class="col-sm-2 col-form-label">ibon cookie ibonqware</label>
+        <div class="row mb-3" data-under="ibon">
+          <label for="ibonqware" class="col-sm-2 col-form-label">ibon cookie ibonqware<span class="help-icon" data-help="ibonqware" title="ibon Cookie 說明" tabindex="0" role="button" aria-label="ibon Cookie 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="ibonqware" value="" />
           </div>
         </div>
 
-        <div class="row mb-3">
-          <label for="funone_session_cookie" class="col-sm-2 col-form-label">FunOne cookie (ticket_session)</label>
+        <div class="row mb-3" data-under="funone">
+          <label for="funone_session_cookie" class="col-sm-2 col-form-label">FunOne cookie (ticket_session)<span class="help-icon" data-help="funone_session_cookie" title="FunOne Cookie 說明" tabindex="0" role="button" aria-label="FunOne Cookie 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="funone_session_cookie" value="" />
           </div>
         </div>
 
-        <div class="row mb-3">
-          <label for="fansigo_cookie" class="col-sm-2 col-form-label">FANSI GO cookie (FansiAuthInfo)</label>
+        <div class="row mb-3" data-under="fansigo">
+          <label for="fansigo_account" class="col-sm-2 col-form-label">FANSI GO</label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <form autocomplete="off">
+            <div class="input-group">
+              <span class="input-group-text">Email</span>
+              <input type="text" id="fansigo_account" value="" class="form-control" autocomplete="username">
+              <span class="input-group-text">密碼</span>
+              <input type="password" id="fansigo_password" value="" class="form-control" autocomplete="current-password">
+            </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="row mb-3" data-under="fansigo">
+          <label for="fansigo_cookie" class="col-sm-2 col-form-label">FANSI GO cookie (FansiAuthInfo)<span class="help-icon" data-help="fansigo_cookie" title="FANSI GO Cookie 說明" tabindex="0" role="button" aria-label="FANSI GO Cookie 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="fansigo_cookie" value="" />
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="tixcraft kktix">
           <label for="facebook_account" class="col-sm-2 col-form-label">Facebook</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -881,7 +935,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="kktix">
           <label for="kktix_account" class="col-sm-2 col-form-label">KKTIX</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -895,7 +949,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="famiticket">
           <label for="fami_account" class="col-sm-2 col-form-label">FamiTicket</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -909,7 +963,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="kham">
           <label for="kham_account" class="col-sm-2 col-form-label">寬宏</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -923,7 +977,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="ticket">
           <label for="ticket_account" class="col-sm-2 col-form-label">年代</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -937,7 +991,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="udn">
           <label for="udn_account" class="col-sm-2 col-form-label">UDN</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -951,7 +1005,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="ticketplus">
           <label for="ticketplus_account" class="col-sm-2 col-form-label">遠大</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -965,7 +1019,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="cityline">
           <label for="cityline_account" class="col-sm-2 col-form-label">cityline</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="input-group">
@@ -975,7 +1029,7 @@
           </div>
         </div>
 
-        <div class="row mb-3 bd-callout bd-callout-warning" id="cityline-login-hint" style="display: none;">
+        <div class="row mb-3 bd-callout bd-callout-warning" id="cityline-login-hint" data-under="cityline" style="display: none;">
           <div class="col">
             <strong>⚠️ Cityline 登入說明（半自動模式）：</strong>
             <ol class="mb-0 mt-2">
@@ -988,7 +1042,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="urbtix">
           <label for="urbtix_account" class="col-sm-2 col-form-label">URBTIX</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -1002,7 +1056,7 @@
           </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3" data-under="hkticketing">
           <label for="hkticketing_account" class="col-sm-2 col-form-label">HKTICKETING</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <form autocomplete="off">
@@ -1034,6 +1088,25 @@
           </div>
         </div>
 
+        <!-- Phase 3: live overview of every instance (profiles + CLI runs) -->
+        <div class="row mb-3" id="instances_panel">
+          <label class="col-sm-2 col-form-label">執行中實例</label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <div class="d-flex align-items-center mb-2">
+              <button type="button" class="btn btn-sm btn-outline-warning" id="pause_all_btn" onclick="pause_all_instances()">全部暫停</button>
+              <span class="text-muted small ms-2">每 2 秒更新；離線 = 逾 30 秒無心跳</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr><th>實例</th><th>存活</th><th>狀態</th><th>執行網址</th><th></th></tr>
+                </thead>
+                <tbody id="instances_tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <div class="row mb-3">
           <label for="last_url" class="col-sm-2 col-form-label">執行網址</label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
@@ -1049,28 +1122,28 @@
         </div>
 
         <div class="row mb-3">
-          <label for="idle_keyword" class="col-sm-2 col-form-label">系統時間 - <span class="text-danger">暫停</span>關鍵字</label>
+          <label for="idle_keyword" class="col-sm-2 col-form-label">系統時間 - <span class="text-danger">暫停</span>關鍵字<span class="help-icon" data-help="idle_keyword" title="系統時間暫停關鍵字說明" tabindex="0" role="button" aria-label="系統時間暫停關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input type="text" class="form-control" id="idle_keyword" placeholder="例如：09:30:00;14:15:30">
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="resume_keyword" class="col-sm-2 col-form-label">系統時間 - <span class="text-success">繼續</span>關鍵字</label>
+          <label for="resume_keyword" class="col-sm-2 col-form-label">系統時間 - <span class="text-success">繼續</span>關鍵字<span class="help-icon" data-help="resume_keyword" title="系統時間繼續關鍵字說明" tabindex="0" role="button" aria-label="系統時間繼續關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input type="text" class="form-control" id="resume_keyword" placeholder="例如：09:35:00;14:20:30">
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="idle_keyword_second" class="col-sm-2 col-form-label">秒數 - <span class="text-danger">暫停</span>關鍵字</label>
+          <label for="idle_keyword_second" class="col-sm-2 col-form-label">秒數 - <span class="text-danger">暫停</span>關鍵字<span class="help-icon" data-help="idle_keyword_second" title="秒數暫停關鍵字說明" tabindex="0" role="button" aria-label="秒數暫停關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input type="text" class="form-control" id="idle_keyword_second" placeholder="例如：00;30;50">
           </div>
         </div>
 
         <div class="row mb-3">
-          <label for="resume_keyword_second" class="col-sm-2 col-form-label">秒數 - <span class="text-success">繼續</span>關鍵字</label>
+          <label for="resume_keyword_second" class="col-sm-2 col-form-label">秒數 - <span class="text-success">繼續</span>關鍵字<span class="help-icon" data-help="resume_keyword_second" title="秒數繼續關鍵字說明" tabindex="0" role="button" aria-label="秒數繼續關鍵字 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input type="text" class="form-control" id="resume_keyword_second" placeholder="例如：05;35;55">
           </div>
@@ -1150,6 +1223,28 @@
   </div>
   </div>
 
+<div class="modal" id="profile_modal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5">新增實例設定檔</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">選擇平台後會以目前設定為底建立新設定檔（homepage 自動帶入），各設定檔可獨立啟動為一個搶票實例。</p>
+        <div id="profile_platform_buttons"></div>
+        <hr>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="profile_custom_name"
+                 placeholder="自訂名稱（英數、底線、連字號）" maxlength="32">
+          <button class="btn btn-outline-primary" type="button" onclick="create_profile_custom()">建立空白命名</button>
+        </div>
+        <div class="form-text text-warning d-none" id="profile_modal_error"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="message_modal" tabindex="-1" role="dialog">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
@@ -1167,6 +1262,22 @@
   </div>
 </div>
 
-  <script src="settings.js?v=2026020916"></script>
+<!-- Help Panel -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="helpPanel"
+     data-bs-scroll="true" data-bs-backdrop="false"
+     aria-labelledby="helpPanelTitle">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="helpPanelTitle">說明</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body" id="helpPanelBody"></div>
+  <div class="border-top p-3 text-center" id="helpPanelFooter" style="display:none;">
+    <a id="helpPanelLink" href="#" target="_blank"
+       class="btn btn-sm btn-outline-secondary">在 GitHub 查看完整說明</a>
+  </div>
+</div>
+
+  <script src="help-content.js?v=2026080721"></script>
+  <script src="settings.js?v=2026080721"></script>
 </body>
 </html>
