@@ -961,39 +961,36 @@ async def nodriver_kktix_date_auto_select(tab, config_dict):
     date_keyword = config_dict["date_auto_select"]["date_keyword"].strip()
     date_auto_fallback = config_dict.get('date_auto_fallback', False)  # T017: Safe access for new field (default: strict mode)
 
-    # Check if multi-session page exists with smart polling
+    # Check if multi-session page exists with smart polling (ultra-fast 50ms interval)
     session_list = None
-    max_wait = 5
-    check_interval = 0.3
+    max_wait = 1.5
+    check_interval = 0.05
     max_attempts = int(max_wait / check_interval)
 
     for attempt in range(max_attempts):
         try:
             session_list = await tab.query_selector_all('div.event-list ul.clearfix > li')
             if session_list and len(session_list) > 0:
-                debug.log(f"[KKTIX DATE] Found {len(session_list)} sessions after {attempt * check_interval:.1f}s")
+                debug.log(f"[KKTIX DATE] Found {len(session_list)} sessions after {attempt * check_interval:.2f}s")
                 break
         except Exception as exc:
             if attempt == max_attempts - 1:
                 debug.log(f"[KKTIX DATE] Error querying session list: {exc}")
 
-        # Early exit: single-session page has no event-list but has a direct buy button
-        if attempt == 0:
-            try:
-                event_list_container = await tab.query_selector('div.event-list')
-                if not event_list_container:
-                    direct_button = await tab.query_selector('.tickets > a.btn-point')
-                    if direct_button:
-                        debug.log("[KKTIX DATE] Single-session page detected (no event-list, direct button found), skipping date select")
-                        return False
-            except Exception:
-                pass
+        # Early exit: detect single-session direct buy button on EVERY attempt (not just attempt == 0)
+        try:
+            direct_button = await tab.query_selector('.tickets > a.btn-point, .tickets a.btn-primary, a.btn-point, a[href*="/registrations/new"]')
+            if direct_button:
+                debug.log(f"[KKTIX DATE] Single-session page detected (direct button found in {attempt * check_interval:.2f}s), skipping date select")
+                return False
+        except Exception:
+            pass
 
         if attempt < max_attempts - 1:
             await tab.sleep(check_interval)
 
     if not session_list or len(session_list) == 0:
-        debug.log(f"[KKTIX DATE] Timeout after {max_wait}s waiting for session list")
+        debug.log(f"[KKTIX DATE] Timeout after {max_wait}s waiting for session list (proceeding to direct buy button)")
         return False
 
     debug.log(f"[KKTIX DATE] Found {len(session_list)} sessions on page")
@@ -1154,7 +1151,7 @@ async def nodriver_kktix_events_press_next_button(tab, config_dict=None):
     try:
         result = await tab.evaluate('''
             (function() {
-                const button = document.querySelector('.tickets > a.btn-point');
+                const button = document.querySelector('.tickets > a.btn-point, .tickets a.btn-primary, a.btn-point, a[href*="/registrations/new"]');
                 if (button) {
                     button.scrollIntoView({ behavior: 'instant', block: 'center' });
                     button.click();
@@ -2386,7 +2383,7 @@ async def nodriver_kktix_main(tab, url, config_dict):
         if not _state["success_actions_done"]:
             if not _state["start_time"] is None:
                 if not _state["done_time"] is None:
-                    bot_elapsed_time = _state["done_time"] - _state["start_time"]
+                    bot_elapsed_time = max(0.001, abs(_state["done_time"] - _state["start_time"]))
                     if _state["elapsed_time"] != bot_elapsed_time:
                         debug.log("[KKTIX] Ticket purchase completed, elapsed time: {:.3f} seconds".format(bot_elapsed_time))
                     _state["elapsed_time"] = bot_elapsed_time
