@@ -1,7 +1,7 @@
 {
     "homepage": "https://kktix.com",
-    "browser": "brave",
-    "language": "English",
+    "browser": "chrome",
+    "language": "\u7e41\u9ad4\u4e2d\u6587",
     "ticket_number": 2,
     "refresh_datetime": "",
     "ocr_captcha": {
@@ -9,9 +9,10 @@
         "beta": true,
         "force_submit": true,
         "image_source": "canvas",
-        "path": ""
+        "use_universal": true,
+        "path": "assets/model/universal"
     },
-    "webdriver_type": "undetected_chromedriver",
+    "webdriver_type": "nodriver",
     "date_auto_select": {
         "enable": true,
         "date_keyword": "",
@@ -19,19 +20,20 @@
     },
     "area_auto_select": {
         "enable": true,
-        "mode": "from bottom to top",
+        "mode": "from top to bottom",
         "area_keyword": ""
     },
-    "keyword_exclude": "\"\u8f2a\u6905\",\"\u8eab\u969c\",\"\u8eab\u5fc3\",\"\u969c\u7919\",\"Restricted View\",\"\u71c8\u67f1\u906e\u853d\",\"\u8996\u7dda\u4e0d\u5b8c\u6574\"",
+    "keyword_exclude": "\"\u8f2a\u6905\",\"\u8eab\u969c\",\"\u8eab\u5fc3\",\"\u969c\u7919\",\"Restricted View\",\"\u71c8\u67f1\u906e\u853d\",\"\u8996\u7dda\u4e0d\u5b8c\u6574\",\"\u611b\u5fc3\"",
     "kktix": {
         "auto_press_next_step_button": true,
         "auto_fill_ticket_number": true,
-        "max_dwell_time": 90
+        "max_dwell_time": 60
     },
     "cityline": {},
     "tixcraft": {
         "pass_date_is_sold_out": true,
-        "auto_reload_coming_soon_page": true
+        "auto_reload_coming_soon_page": true,
+        "allow_less_tickets": true
     },
     "contact": {
         "real_name": "",
@@ -42,6 +44,9 @@
         "tixcraft_sid": "",
         "ibonqware": "",
         "funone_session_cookie": "",
+        "fansigo_cookie": "",
+        "fansigo_account": "",
+        "fansigo_password": "",
         "facebook_account": "",
         "kktix_account": "",
         "fami_account": "",
@@ -69,20 +74,19 @@
             "order": false,
             "filename": "assets/sounds/ding-dong.wav"
         },
-        "chrome_extension": false,
         "disable_adjacent_seat": true,
         "hide_some_image": true,
-        "block_facebook_network": false,
+        "block_facebook_network": true,
         "headless": false,
-        "verbose": true,
-        "auto_guess_options": false,
+        "verbose": false,
+        "show_timestamp": false,
+        "auto_guess_options": true,
         "user_guess_string": "",
         "discount_code": "",
         "server_port": 16888,
         "remote_url": "\"http://127.0.0.1:16888/\"",
-        "auto_reload_page_interval": 0.1,
-        "auto_reload_overheat_count": 4,
-        "auto_reload_overheat_cd": 1,
+        "auto_reload_page_interval": 0.05,
+        "tixcraft_soft_block_delay": "",
         "reset_browser_interval": 0,
         "proxy_server_port": "",
         "window_size": "",
@@ -90,7 +94,11 @@
         "resume_keyword": "",
         "idle_keyword_second": "",
         "resume_keyword_second": "",
-        "discord_webhook_url": ""
+        "discord_webhook_url": "",
+        "discord_message": "",
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
+        "telegram_message": ""
     },
     "date_auto_fallback": true,
     "area_auto_fallback": true
