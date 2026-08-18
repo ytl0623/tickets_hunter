@@ -909,7 +909,27 @@ async def nodriver_ticketplus_unified_select(tab, config_dict, area_keyword):
                         return {{ success: true, type: 'expansion_panel', selected: target.name, clicked: true }};
                     }}
 
-                    return {{ success: true, type: 'expansion_panel', selected: target.name, clicked: false, needRetry: true }};
+                    // Asynchronously wait for Vue expansion animation / DOM mount (poll every 10ms)
+                    return new Promise((resolve) => {{
+                        const startTime = Date.now();
+                        const pollPlus = () => {{
+                            let dynamicBtn = target.panel.querySelector('.mdi-plus') ||
+                                             target.panel.querySelector('.count-button .mdi-plus') ||
+                                             document.querySelector('.v-expansion-panel--active .mdi-plus') ||
+                                             document.querySelector('.v-expansion-panel--active .count-button .mdi-plus');
+                            if (dynamicBtn) {{
+                                for (let j = 0; j < ticketNumber; j++) {{
+                                    dynamicBtn.click();
+                                }}
+                                resolve({{ success: true, type: 'expansion_panel', selected: target.name, clicked: true }});
+                            }} else if (Date.now() - startTime < 350) {{
+                                setTimeout(pollPlus, 10);
+                            }} else {{
+                                resolve({{ success: true, type: 'expansion_panel', selected: target.name, clicked: false, needRetry: true }});
+                            }}
+                        }};
+                        setTimeout(pollPlus, 10);
+                    }});
 
                 }} else if (hasCountButton) {{
                     const rows = document.querySelectorAll('.row.py-1.py-md-4');
@@ -971,7 +991,7 @@ async def nodriver_ticketplus_unified_select(tab, config_dict, area_keyword):
             if result.get('needRetry', False):
                 debug.log(f"[RETRY] Panel expanded but plus button not found, retrying...")
 
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.05)
 
                 for retry in range(5):
                     retry_result = await tab.evaluate(f'''
@@ -1708,6 +1728,7 @@ async def nodriver_ticketplus_wait_for_vue_ready(tab, max_wait_ms=800):
             }})();
         ''')
 
+        result = util.parse_nodriver_result(result)
         if isinstance(result, dict):
             return result.get('ready', False)
         return False
@@ -1888,12 +1909,12 @@ async def nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser):
 
             is_first_visit = not _state.get("order_page_visited", False)
             if is_first_visit:
-                max_wait = 2000
-                fallback_delay = 0.5
+                max_wait = 1200
+                fallback_delay = 0.05
                 _state["order_page_visited"] = True
             else:
-                max_wait = 1000
-                fallback_delay = 0.3
+                max_wait = 800
+                fallback_delay = 0.05
 
             if debug.enabled:
                 visit_type = "First visit" if is_first_visit else "Reload"
