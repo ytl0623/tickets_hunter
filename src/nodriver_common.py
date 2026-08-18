@@ -545,6 +545,10 @@ async def nodriver_current_url(tab, config_dict=None):
     is_quit_bot = False
     url = ""
     if tab:
+        # Check if tab / websocket connection is already closed
+        if getattr(tab, 'closed', False) or getattr(getattr(tab, 'target', None), 'closed', False) or getattr(getattr(tab, 'websocket', None), 'closed', False):
+            return "", True
+
         # Fast path: use CDP-cached target URL (no JS execution needed)
         try:
             target_url = tab.target.url if hasattr(tab, 'target') and tab.target else ""

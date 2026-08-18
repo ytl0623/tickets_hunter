@@ -1308,6 +1308,9 @@ async def nodriver_ticketplus_accept_order_fail(tab, debug=None):
             return True
         return False
     except Exception as exc:
+        str_exc = str(exc)
+        if any(s in str_exc for s in ["no close frame", "ConnectionClosed", "closed", "Target closed", "WebSocket"]):
+            return False
         if debug is not None:
             debug.log(f"[ORDER FAIL][DEGRADED] evaluate failed, popup state unknown: {exc}")
         return None
