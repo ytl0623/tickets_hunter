@@ -435,6 +435,21 @@ async def nodrver_block_urls(tab, config_dict):
 
         # Cookie consent geolocation
         '*geolocation.onetrust.com/*',
+
+        # Additional media files
+        '*.mp4',
+        '*.webm',
+        '*.ogg',
+        '*.mp3',
+        '*.flac',
+
+        # Additional tracking/ads
+        '*ads.yahoo.com*',
+        '*line.me/tag*',
+        '*scdn.line-apps.com/n/line_tag*',
+        '*bat.bing.com*',
+        '*adservice.google.com*',
+        '*pagead2.googlesyndication.com*',
     ]
 
     # Block session-recording trackers for non-TicketPlus platforms only.
@@ -904,44 +919,24 @@ async def main(args):
                 # 保留 is_quit_bot = False 以防止程式結束，但不建立暫停檔案
                 is_quit_bot = False
 
-        tixcraft_family = False
-        if 'tixcraft.com' in url:
-            tixcraft_family = True
-
-        if 'indievox.com' in url:
-            tixcraft_family = True
-
-        if 'ticketmaster.' in url:
-            tixcraft_family = True
-
-        if tixcraft_family:
+        elif 'tixcraft.com' in url or 'indievox.com' in url or 'ticketmaster.' in url:
             is_quit_bot = await nodriver_tixcraft_main(tab, url, config_dict, ocr, Captcha_Browser)
             if is_quit_bot:
                 # 不自動暫停：讓多開實例可獨立運作
                 # 保留 is_quit_bot = False 以防止程式結束，但不建立暫停檔案
                 is_quit_bot = False
 
-        if 'famiticket.com' in url:
+        elif 'famiticket.com' in url:
             await nodriver_famiticket_main(tab, url, config_dict)
 
-        if 'ibon.com' in url:
+        elif 'ibon.com' in url:
             await nodriver_ibon_main(tab, url, config_dict, ocr, Captcha_Browser)
 
-        kham_family = False
-        if 'kham.com.tw' in url:
-            kham_family = True
-
-        if 'ticket.com.tw' in url:
-            kham_family = True
-
-        if 'tickets.udnfunlife.com' in url:
-            kham_family = True
-
-        if kham_family:
+        elif 'kham.com.tw' in url or 'ticket.com.tw' in url or 'tickets.udnfunlife.com' in url:
             tab = await nodriver_kham_main(tab, url, config_dict, ocr)
 
         # https://ticketplus.com.tw/*
-        if 'ticketplus.com' in url and not ticketplus_purchase_done:
+        elif 'ticketplus.com' in url and not ticketplus_purchase_done:
             tp_status = await nodriver_ticketplus_main(tab, url, config_dict, ocr, Captcha_Browser)
 
             if isinstance(tp_status, dict):
@@ -954,38 +949,30 @@ async def main(args):
                         print("[SUCCESS] TicketPlus on confirmation page, booking successful")
                         ticketplus_purchase_done = True
 
-        if 'urbtix.hk' in url:
+        elif 'urbtix.hk' in url:
             #urbtix_main(driver, url, config_dict)
             pass
 
-        if 'cityline.com' in url:
+        elif 'cityline.com' in url:
             tab = await nodriver_cityline_main(tab, url, config_dict)
 
-        softix_family = False
-        if 'hkticketing.com' in url:
-            softix_family = True
-        if 'galaxymacau.com' in url:
-            softix_family = True
-        if 'ticketek.com' in url:
-            softix_family = True
-        if softix_family:
+        elif 'hkticketing.com' in url or 'galaxymacau.com' in url or 'ticketek.com' in url:
             tab = await nodriver_hkticketing_main(tab, url, config_dict)
 
         # FunOne Tickets
-        if 'tickets.funone.io' in url:
+        elif 'tickets.funone.io' in url:
             tab = await nodriver_funone_main(tab, url, config_dict)
 
         # FANSI GO
-        if 'go.fansi.me' in url:
+        elif 'go.fansi.me' in url:
             tab = await nodriver_fansigo_main(tab, url, config_dict)
 
         # FANSI GO Cognito login
-        if FANSIGO_COGNITO_DOMAIN in url:
+        elif FANSIGO_COGNITO_DOMAIN in url:
             await nodriver_fansigo_signin(tab, url, config_dict)
 
         # for facebook
-        facebook_login_url = 'https://www.facebook.com/login.php?'
-        if url[:len(facebook_login_url)]==facebook_login_url:
+        elif url[:len('https://www.facebook.com/login.php?')]=='https://www.facebook.com/login.php?':
             await nodriver_facebook_main(tab, config_dict)
 
 def cli():

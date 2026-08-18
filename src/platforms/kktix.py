@@ -662,9 +662,6 @@ async def nodriver_kktix_assign_ticket_number(tab, config_dict, kktix_area_keywo
             # 使用統一解析函數處理返回值
             assign_result = util.parse_nodriver_result(assign_result)
 
-            if assign_result and assign_result.get('success') and assign_result.get('assigned'):
-                await asyncio.sleep(0.2)
-
             if assign_result and assign_result.get('success'):
                 current_ticket_number = assign_result.get('value', '')
                 ticket_name = assign_result.get('ticketName', '未知票種')
@@ -759,7 +756,7 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
 
                     try:
                         # 人類化延遲：0.3-1秒隨機延遲
-                        human_delay = random.uniform(0.3, 1.0)
+                        human_delay = 0.02
                         await tab.sleep(human_delay)
 
                         # 填寫驗證碼答案
@@ -802,7 +799,7 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
                             debug.log(f"Captcha answer filled successfully: {inferred_answer_string}")
 
                             # 短暫延遲後點擊按鈕
-                            button_delay = random.uniform(0.5, 1.2)
+                            button_delay = 0.02
                             await tab.sleep(button_delay)
 
                             # 點擊下一步按鈕
@@ -811,7 +808,7 @@ async def nodriver_kktix_reg_captcha(tab, config_dict, fail_list, registrationsN
                             if button_click_success:
                                 success = True
                                 # 最終延遲
-                                final_delay = random.uniform(0.75, 1.5)
+                                final_delay = 0.05
                                 await tab.sleep(final_delay)
 
                                 fail_list.append(inferred_answer_string)
@@ -1766,7 +1763,7 @@ async def nodriver_kktix_press_next_button(tab, config_dict=None):
                     debug.log(f"KKTIX button click successful: [{button_text}]")
 
                     # 等待頁面處理並檢查是否跳轉
-                    await asyncio.sleep(0.3)  # 給 KKTIX 伺服器時間處理
+                    await asyncio.sleep(0.05)  # 給 KKTIX 伺服器時間處理
 
                     # 主動檢查並關閉 alert（備援機制，避免 CDP event handler 未觸發）
                     try:
@@ -1785,7 +1782,7 @@ async def nodriver_kktix_press_next_button(tab, config_dict=None):
                         pass
 
                     # 如果沒有跳轉，等待原有時間並返回成功
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.05)
                     return True
             else:
                 error_msg = result.get('error', 'Unknown error') if result else 'No result'
@@ -2283,13 +2280,15 @@ async def nodriver_kktix_main(tab, url, config_dict):
 
             is_dom_ready = False
             try:
-                html_body = await tab.get_content()
-                #print("html_body:",len(html_body))
-                if html_body:
-                    if len(html_body) > 10240:
-                        if "registrationsNewApp" in html_body:
-                            if not "{{'new.i_read_and_agree_to'" in html_body:
-                                is_dom_ready = True
+                page_check = await tab.evaluate('''(() => {
+                    const html = document.documentElement.innerHTML;
+                    return {
+                        hasApp: html.includes('registrationsNewApp'),
+                        isRendered: !html.includes("{{'new.i_read_and_agree_to'")
+                    };
+                })()''')
+                if page_check and page_check.get('hasApp') and page_check.get('isRendered'):
+                    is_dom_ready = True
             except Exception as exc:
                 #print(exc)
                 pass

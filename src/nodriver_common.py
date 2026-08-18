@@ -543,60 +543,45 @@ def reset_url_error_state():
 async def nodriver_current_url(tab, config_dict=None):
     debug = util.create_debug_logger(config_dict)
     is_quit_bot = False
-
     url = ""
     if tab:
-        url_dict = {}
+        # Fast path: use CDP-cached target URL (no JS execution needed)
         try:
-            url_dict = await asyncio.wait_for(
-                tab.js_dumps('window.location.href'), timeout=5.0
-            )
-        except asyncio.TimeoutError:
-            # js_dumps blocks when JS execution is suspended (alert dialog,
-            # navigation, tab throttling, or a Cloudflare full-page interstitial)
-            # tab.target.url is a CDP-cached value that never requires JS execution
-            _url_error_state["js_timeout_count"] += 1
-            url = tab.target.url if hasattr(tab, 'target') and tab.target else ""
-            # [URL DIAG] Step 0: surface the otherwise-invisible suspended-JS path.
-            # Naturally rate-limited (this branch costs ~5s per hit).
-            debug.log(f"[URL DIAG] js_dumps timed out (5s); fallback target.url={url!r}")
-            return url, is_quit_bot
-        except Exception as exc:
-            str_exc = ""
-            try:
-                str_exc = str(exc)
-            except Exception as exc2:
-                pass
-            is_silent, is_exit_error = classify_url_error(str_exc)
-            if is_exit_error:
-                is_quit_bot = True
-            if not is_silent:
-                print(exc)
-            # [URL DIAG] Step 0: a stale/dead tab target surfaces here (not as timeout).
-            # Expected websocket-close errors (silent list) flood the log when the page
-            # is closed while the loop still polls; the throttled empty-url log in the
-            # main loop keeps surfacing that state, so skip the per-poll DIAG line.
-            if not is_silent:
-                target_url_now = getattr(getattr(tab, 'target', None), 'url', None)
-                debug.log(f"[URL DIAG] js_dumps error; target.url={target_url_now!r}; exc={str_exc[:120]!r}")
-            elif record_url_silent_error(str_exc):
-                # print() rather than debug.log(): this is an actionable failure
-                # the user must see even with verbose off. Behaviour is unchanged
-                # on purpose - no auto-reconnect, no forced quit - so the user
-                # decides what to do (issue #374).
-                count = get_url_error_count()
-                print(f"[URL ERROR] Browser connection lost: {count} consecutive "
-                      f"websocket failures ({str_exc[:80]}).")
-                print("[URL ERROR] The bot cannot read the page URL and will keep "
-                      "idling. Please close the browser and restart the bot.")
-
-        url_array = []
-        if url_dict:
-            for k in url_dict:
-                if k.isnumeric():
-                    if "0" in url_dict[k]:
-                        url_array.append(url_dict[k]["0"])
-            url = ''.join(url_array)
+            target_url = tab.target.url if hasattr(tab, 'target') and tab.target else ""
+            if target_url and len(target_url) > 0 and target_url != "about:blank":
+                url = target_url
+            else:
+                # Slow path: evaluate JS only when target URL is unavailable
+                try:
+                    url = await asyncio.wait_for(
+                        tab.evaluate('window.location.href'), timeout=2.0
+                    )
+                    if url is None:
+                        url = ""
+                except asyncio.TimeoutError:
+                    _url_error_state["js_timeout_count"] += 1
+                    url = target_url if target_url else ""
+                    debug.log(f"[URL DIAG] evaluate timed out (2s); fallback target.url={url!r}")
+                    return url, is_quit_bot
+                except Exception as exc:
+                    str_exc = ""
+                    try:
+                        str_exc = str(exc)
+                    except Exception:
+                        pass
+                    is_silent, is_exit_error = classify_url_error(str_exc)
+                    if is_exit_error:
+                        is_quit_bot = True
+                    if not is_silent:
+                        print(exc)
+                        target_url_now = getattr(getattr(tab, 'target', None), 'url', None)
+                        debug.log(f"[URL DIAG] evaluate error; target.url={target_url_now!r}; exc={str_exc[:120]!r}")
+                    elif record_url_silent_error(str_exc):
+                        count = get_url_error_count()
+                        print(f"[URL ERROR] Browser connection lost: {count} consecutive websocket failures ({str_exc[:80]}).")
+                        print("[URL ERROR] The bot cannot read the page URL and will keep idling. Please close the browser and restart the bot.")
+        except Exception:
+            pass
 
         if len(url) > 0:
             recovered = reset_url_error_state()

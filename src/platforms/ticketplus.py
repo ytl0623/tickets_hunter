@@ -391,7 +391,7 @@ async def nodriver_ticketplus_date_auto_select(tab, config_dict):
                     row_text = ""
 
             if len(row_text) > 0:
-                if '<div class="v-progress-circular__info"></div>' in row_html:
+                if '<div class="v-progress-circular__info"></div>' in row_html or 'loading...' in row_text.lower() or 'c18900a1d5f295218fe60b982d7ece96' in row_html:
                     is_vue_ready = False
                     break
 
@@ -472,7 +472,12 @@ async def nodriver_ticketplus_date_auto_select(tab, config_dict):
                     const el = document.querySelector('.eventClass');
                     if (!el || !el.__vue__) return { ready: false };
                     const sessions = el.__vue__.$data.sessions || [];
-                    const loaded = sessions.filter(function(s) { return s.loadingStatusFinished; });
+                    const loaded = sessions.filter(function(s) {
+                        return s.loadingStatusFinished
+                            && s.sessionId !== 'c18900a1d5f295218fe60b982d7ece96'
+                            && !(s.name && s.name.includes('Loading'))
+                            && !(s.date && s.date.includes('2024-05-20'));
+                    });
                     return {
                         ready: loaded.length > 0,
                         sessions: loaded.map(function(s) {
@@ -536,11 +541,19 @@ async def nodriver_ticketplus_date_auto_select(tab, config_dict):
                     console.log('[TicketPlus] Starting date selection - keyword:', originalKeyword, 'mode:', autoSelectMode, 'fallback:', dateAutoFallback);
 
                     let sessionContainers = Array.from(document.querySelectorAll('div#buyTicket div.sesstion-item'))
-                        .filter(c => c.querySelector('button.nextBtn'));
+                        .filter(c => {{
+                            const btn = c.querySelector('button.nextBtn');
+                            const text = (c.textContent || '').toLowerCase();
+                            return btn && !text.includes('loading...') && !text.includes('2024-05-20');
+                        }});
 
                     if (sessionContainers.length === 0) {{
                         sessionContainers = Array.from(document.querySelectorAll('div#buyTicket div.row.pa-4'))
-                            .filter(c => c.querySelector('button.nextBtn'));
+                            .filter(c => {{
+                                const btn = c.querySelector('button.nextBtn');
+                                const text = (c.textContent || '').toLowerCase();
+                                return btn && !text.includes('loading...') && !text.includes('2024-05-20');
+                            }});
                     }}
 
                     console.log('[TicketPlus] Found session containers:', sessionContainers.length);
@@ -1080,7 +1093,7 @@ async def nodriver_ticketplus_click_next_button_unified(tab, config_dict):
     debug.log("Unified next button clicker started")
 
     try:
-        if await sleep_with_pause_check(tab, 0.6, config_dict):
+        if await sleep_with_pause_check(tab, 0.05, config_dict):
             return False
 
         js_result = await tab.evaluate('''
@@ -1172,57 +1185,39 @@ async def nodriver_ticketplus_click_next_button_unified(tab, config_dict):
 
 
 async def nodriver_ticketplus_ticket_agree(tab, config_dict):
-    """TicketPlus agreement checkbox."""
+    """TicketPlus agreement checkbox - fast atomic JS."""
     if await check_and_handle_pause(config_dict):
         return False
 
     debug = util.create_debug_logger(config_dict)
-    is_finish_checkbox_click = False
 
     try:
-        agree_checkbox_list = await tab.query_selector_all('input[type="checkbox"]')
-
-        for checkbox in agree_checkbox_list:
-            try:
-                if not checkbox:
-                    continue
-
-                is_checked = await checkbox.evaluate('el => el.checked')
-
-                if not is_checked:
-                    await checkbox.click()
-
-                    is_checked_after = await checkbox.evaluate('el => el.checked')
-                    if is_checked_after:
-                        is_finish_checkbox_click = True
-                        debug.log("successfully checked agreement checkbox")
-                    else:
-                        if checkbox:
-                            await tab.evaluate('''
-                                (checkbox) => {
-                                    if (checkbox) {
-                                        checkbox.checked = true;
-                                        checkbox.dispatchEvent(new Event('change', {bubbles: true}));
-                                    }
-                                }
-                            ''', checkbox)
-
-                            final_check = await checkbox.evaluate('el => el.checked')
-                            if final_check:
-                                is_finish_checkbox_click = True
-                                debug.log("successfully checked agreement checkbox via JS")
-                else:
-                    is_finish_checkbox_click = True
-                    debug.log("agreement checkbox already checked")
-
-            except Exception as exc:
-                debug.log("process checkbox fail:", exc)
-                continue
-
+        res = await tab.evaluate('''
+            (function() {
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                let checkedCount = 0;
+                for (const cb of checkboxes) {
+                    if (!cb.checked) {
+                        cb.click();
+                        if (!cb.checked) {
+                            cb.checked = true;
+                            cb.dispatchEvent(new Event('change', {bubbles: true}));
+                            cb.dispatchEvent(new Event('input', {bubbles: true}));
+                        }
+                    }
+                    if (cb.checked) checkedCount++;
+                }
+                return { count: checkboxes.length, checked: checkedCount };
+            })()
+        ''')
+        res = util.parse_nodriver_result(res)
+        if isinstance(res, dict) and res.get('checked', 0) > 0:
+            debug.log(f"successfully checked agreement checkbox ({res.get('checked')}/{res.get('count')})")
+            return True
     except Exception as exc:
-        debug.log("find agreement checkbox fail:", exc)
+        debug.log("process checkbox fail:", exc)
 
-    return is_finish_checkbox_click
+    return False
 
 
 async def nodriver_ticketplus_accept_realname_card(tab):
@@ -1611,7 +1606,7 @@ async def nodriver_ticketplus_order(tab, config_dict, ocr, Captcha_Browser):
 
         is_answer_sent, _state["fail_list"], is_question_popup = await nodriver_ticketplus_order_exclusive_code(tab, config_dict, _state["fail_list"])
 
-        if await sleep_with_pause_check(tab, 0.3, config_dict):
+        if await sleep_with_pause_check(tab, 0.05, config_dict):
             debug.log("Paused before form submission")
             return
         await nodriver_ticketplus_ticket_agree(tab, config_dict)
@@ -1666,8 +1661,6 @@ async def nodriver_ticketplus_wait_for_vue_ready(tab, max_wait_ms=800):
         bool: True if Vue.js is ready, False if timed out
     """
     try:
-        await asyncio.sleep(0.15)
-
         result = await tab.evaluate(f'''
             (function() {{
                 return new Promise((resolve) => {{

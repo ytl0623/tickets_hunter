@@ -24,6 +24,8 @@ CONST_KEYWORD_DELIMITER = ';'  # New delimiter (semicolon)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 
+RE_HTML_TAGS = re.compile(r'<.*?>')
+
 def get_ip_address():
     gethostname = None
     try:
@@ -74,8 +76,7 @@ def is_connectable(port: int, host: Optional[str] = "localhost") -> bool:
 def remove_html_tags(text):
     ret = ""
     if not text is None:
-        clean = re.compile('<.*?>')
-        ret = re.sub(clean, '', text)
+        ret = re.sub(RE_HTML_TAGS, '', text)
         ret = ret.strip()
     return ret
 
@@ -347,18 +348,23 @@ def format_quota_string(formated_html_text):
     formated_html_text = formated_html_text.replace(')','】')
     return formated_html_text
 
+FULL2HALF_TRANS = str.maketrans({0x3000: ' ', **{i: chr(i - 0xFEE0) for i in range(0xFF01, 0xFF5F)}})
+
 def full2half(keyword):
-    n = ""
-    if not keyword is None:
-        if len(keyword) > 0:
-            for char in keyword:
-                num = ord(char)
-                if num == 0x3000:
-                    num = 32
-                elif 0xFF01 <= num <= 0xFF5E:
-                    num -= 0xfee0
-                n += chr(num)
-    return n
+    return keyword.translate(FULL2HALF_TRANS) if keyword else ''
+
+CHINESE_NUMERIC_MAP = {
+    '0': 0, '０': 0, 'zero': 0, '零': 0,
+    '1': 1, '１': 1, 'one': 1, '一': 1, '壹': 1, '①': 1, '❶': 1, '⑴': 1,
+    '2': 2, '２': 2, 'two': 2, '二': 2, '貳': 2, '②': 2, '❷': 2, '⑵': 2,
+    '3': 3, '３': 3, 'three': 3, '三': 3, '叁': 3, '③': 3, '❸': 3, '⑶': 3,
+    '4': 4, '４': 4, 'four': 4, '四': 4, '肆': 4, '④': 4, '❹': 4, '⑷': 4,
+    '5': 5, '５': 5, 'five': 5, '五': 5, '伍': 5, '⑤': 5, '❺': 5, '⑸': 5,
+    '6': 6, '６': 6, 'six': 6, '六': 6, '陸': 6, '⑥': 6, '❻': 6, '⑹': 6,
+    '7': 7, '７': 7, 'seven': 7, '七': 7, '柒': 7, '⑦': 7, '❼': 7, '⑺': 7,
+    '8': 8, '８': 8, 'eight': 8, '八': 8, '捌': 8, '⑧': 8, '❽': 8, '⑻': 8,
+    '9': 9, '９': 9, 'nine': 9, '九': 9, '玖': 9, '⑨': 9, '❾': 9, '⑼': 9
+}
 
 def get_chinese_numeric():
     my_dict = {}
@@ -385,24 +391,10 @@ def synonym_dict(char):
     return ret
 
 def chinese_numeric_to_int(char):
-    ret = None
-    my_dict = get_chinese_numeric()
-    for i in my_dict:
-        for item in my_dict[i]:
-            if char.lower() == item:
-                ret = int(i)
-                break
-        if not ret is None:
-            break
-    return ret
+    return CHINESE_NUMERIC_MAP.get(char.lower()) if char else None
 
 def normalize_chinese_numeric(keyword):
-    ret = ""
-    for char in keyword:
-        converted_int =  chinese_numeric_to_int(char)
-        if not converted_int is None:
-            ret += str(converted_int)
-    return ret
+    return ''.join(str(CHINESE_NUMERIC_MAP.get(char.lower())) for char in keyword if char and char.lower() in CHINESE_NUMERIC_MAP)
 
 def find_continuous_number(text):
     chars = "0123456789"
@@ -429,23 +421,9 @@ def find_continuous_pattern(allowed_char, text):
 
 def is_all_alpha_or_numeric(text):
     ret = False
-    alpha_count = 0
-    numeric_count = 0
-    for char in text:
-        try:
-            if char.encode('UTF-8').isalpha():
-                alpha_count += 1
-        except Exception as exc:
-            pass
-
-        #if char.isnumeric():
-        if char.isdigit():
-            numeric_count += 1
-
-    if (alpha_count + numeric_count) == len(text):
-        ret = True
-
-    #print("text/is_all_alpha_or_numeric:",text,ret)
+    if text:
+        if len(text) > 0:
+            ret = text.isalnum()
     return ret
 
 def get_brave_bin_path():
