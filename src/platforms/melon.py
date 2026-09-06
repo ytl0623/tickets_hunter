@@ -187,6 +187,56 @@ async def _register_alert_handler(tab, config_dict):
         debug.log(f"[MELON ALERT] handler register failed: {exc}")
 
 
+async def _wait_for_manual_login(tab):
+    """Suspend the main loop until the user finishes the Melon login.
+
+    A login page can remain open for minutes.  The normal 50 ms platform loop
+    would otherwise repeatedly inspect it, so use CDP's navigation event as
+    the wake-up signal instead of polling the page while the user logs in.
+    """
+    login_event = getattr(tab, "_melon_login_event", None)
+    if login_event is None:
+        login_event = asyncio.Event()
+
+        async def handle_navigation(event):
+            frame = getattr(event, "frame", None)
+            # Only a top-level navigation proves that the login flow finished;
+            # frames inside the identity-provider page navigate independently.
+            if frame and getattr(frame, "parent_id", None) is None:
+                if not _is_melon_login_url(getattr(frame, "url", "")):
+                    login_event.set()
+
+        tab.add_handler(cdp.page.FrameNavigated, handle_navigation)
+        # add_handler only stores the callback; zendriver sends Page.enable
+        # from the next send().  This function awaits without sending anything,
+        # so enable the domain here or no event ever arrives and the wait hangs.
+        await tab.send(cdp.page.enable())
+        setattr(tab, "_melon_login_event", login_event)
+
+    # Clear a signal from an earlier successful login before beginning a new
+    # manual-login wait.  If navigation won the race, the URL check avoids
+    # waiting after the user has already left the page.
+    login_event.clear()
+    current_url = str(getattr(getattr(tab, "target", None), "url", "") or "")
+    if not _is_melon_login_url(current_url):
+        return
+
+    print("[MELON] 目前在 Melon 登入頁，請手動登入；登入完成後會自動繼續")
+    while True:
+        try:
+            await asyncio.wait_for(login_event.wait(), timeout=1.0)
+            break
+        except asyncio.TimeoutError:
+            # Fallback: a login finished in a separate popup never navigates
+            # this tab, so no FrameNavigated arrives.  target.url is a CDP
+            # cached value that costs nothing, and the 1 s tick keeps the
+            # stop/pause controls responsive while the wait is in progress.
+            live_url = str(getattr(getattr(tab, "target", None), "url", "") or "")
+            if not _is_melon_login_url(live_url):
+                break
+    print("[MELON] 偵測到登入完成，繼續執行")
+
+
 # ===== Keyword matching =====
 
 def _parse_keyword_array(keyword_str):
@@ -858,19 +908,48 @@ def _report_stuck(key, what):
 
 CONST_MELON_SET_QTY_JS = '''
     const want = String(%d);
+    const requested = Number(want);
     const selects = Array.from(document.querySelectorAll('select'))
         .filter(s => !s.disabled && s.offsetParent !== null);
-    for (const sel of selects) {
-        const opt = Array.from(sel.options)
-            .find(o => o.value === want || (o.text || '').trim() === want);
-        if (!opt) continue;
+
+    function setQuantity(sel, opt, selectedCount, fallback) {
         if (sel.value === opt.value) {
-            return { success: true, already: true, id: sel.id, name: sel.name };
+            return { success: true, already: true, id: sel.id, name: sel.name,
+                     selectedCount: selectedCount, fallback: fallback };
         }
         sel.value = opt.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
-        return { success: true, already: false, id: sel.id,
-                 name: sel.name, value: opt.value };
+        return { success: true, already: false, id: sel.id, name: sel.name,
+                 value: opt.value, selectedCount: selectedCount,
+                 fallback: fallback };
+    }
+
+    // Prefer the requested count exactly.  Melon exposes one select per ticket
+    // type, so checking every select preserves the existing ticket-type choice.
+    for (const sel of selects) {
+        const opt = Array.from(sel.options)
+            .find(o => o.value === want || (o.text || '').trim() === want);
+        if (opt) return setQuantity(sel, opt, requested, false);
+    }
+
+    // If the requested quantity is sold out, use the largest remaining option
+    // that is still no greater than the request (e.g. 4 -> 3 -> 2 -> 1).
+    let fallback = null;
+    for (const sel of selects) {
+        for (const opt of Array.from(sel.options)) {
+            const value = (opt.value || '').trim();
+            const text = (opt.text || '').trim();
+            const valueCount = Number(value);
+            const textCount = Number(text);
+            const count = Number.isInteger(valueCount) ? valueCount : textCount;
+            if (!Number.isInteger(count) || count < 1 || count > requested) continue;
+            if (!fallback || count > fallback.count) {
+                fallback = { sel: sel, opt: opt, count: count };
+            }
+        }
+    }
+    if (fallback) {
+        return setQuantity(fallback.sel, fallback.opt, fallback.count, true);
     }
     return { success: false, selectCount: selects.length,
              optionSets: selects.map(s => Array.from(s.options)
@@ -903,15 +982,21 @@ async def _melon_ticket_step(tab, config_dict):
                 debug.log(f"[MELON QTY] available options: {qty['optionSets']}")
         return
 
+    selected_number = qty.get("selectedCount", ticket_number)
     if not qty.get("already"):
-        debug.log(f"[MELON QTY] set {ticket_number} on select "
+        selection_note = " (requested unavailable)" if qty.get("fallback") else ""
+        debug.log(f"[MELON QTY] set {selected_number} on select "
+                  f"{selection_note}"
                   f"id={qty.get('id')!r} name={qty.get('name')!r}")
         await asyncio.sleep(0.4)   # let the page recalculate the total
 
     if await _melon_click_labeled_button(tab, config_dict,
                                          CONST_MELON_NEXT_TEXTS, "NEXT"):
         _state["ticket_submit_time"] = time.time()
-        print(f"[MELON] 已選 {ticket_number} 張並點擊 Next")
+        if qty.get("fallback"):
+            print(f"[MELON] 要求 {ticket_number} 張但庫存不足，改選 {selected_number} 張並點擊 Next")
+        else:
+            print(f"[MELON] 已選 {selected_number} 張並點擊 Next")
 
 
 # ===== stepDelivery / stepPay: mobile, card, terms, checkout =====
@@ -1131,8 +1216,7 @@ async def nodriver_melon_main(tab, url, config_dict):
     debug = util.create_debug_logger(config_dict)
 
     if _is_melon_login_url(url):
-        if _throttled("log_login", CONST_MELON_LOG_INTERVAL):
-            print("[MELON] 目前在 Melon 登入頁，請手動登入後機器人會自動接手")
+        await _wait_for_manual_login(tab)
         return tab
 
     if is_melon_booking_url(url):
