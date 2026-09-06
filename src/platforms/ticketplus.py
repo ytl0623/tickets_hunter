@@ -44,6 +44,23 @@ __all__ = [
 
 _state = {}
 
+# After the next button is clicked the site does one of three things: navigate to
+# the confirmation page, open a failure dialog, or enter its in-page queue. Poll
+# for all three instead of sleeping blind for a fixed window (#389).
+CONST_TICKETPLUS_SUBMIT_WAIT_MAX = 10.0
+CONST_TICKETPLUS_SUBMIT_POLL_INTERVAL = 0.3
+
+# The queue re-check keeps a randomized 5-10s cadence (anti-detection), but the
+# URL is polled at this interval so a page transition is not missed for a cycle.
+CONST_TICKETPLUS_QUEUE_URL_POLL_INTERVAL = 0.5
+
+# Absolute fuse on queue monitoring. The queue keywords include wording as
+# generic as "processing" and "please wait", so any future dialog carrying one
+# can strand the loop the same way the failure popup did (#389). While stranded
+# the main loop never runs, which also leaves the stop flag unreadable -- only
+# the pause flag is checked in here. Ten minutes is well past any real queue.
+CONST_TICKETPLUS_QUEUE_MONITOR_MAX = 600.0
+
 
 def _get_status():
     """Return current ticketplus status for main loop (Approach B)."""
@@ -1267,9 +1284,21 @@ async def nodriver_ticketplus_accept_order_fail(tab, debug=None):
                     'OK',
                     'Ok'
                 ];
+                // .v-dialog__content is position:fixed, so its offsetParent is
+                // always null whether or not the dialog shows. rect + computed
+                // style is the only visibility test valid for every wrapper.
+                const isVisible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    if (!rect.width || !rect.height) return false;
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' &&
+                           style.visibility !== 'hidden' &&
+                           style.opacity !== '0';
+                };
+
                 const dialogs = document.querySelectorAll('[role="dialog"], .v-dialog, .v-dialog__content');
                 for (const dialog of dialogs) {
-                    if (dialog.offsetParent === null) continue;
+                    if (!isVisible(dialog)) continue;
                     const text = (dialog.textContent || '').trim();
                     if (!failureTexts.some(t => text.includes(t))) continue;
                     const buttons = dialog.querySelectorAll('button');
@@ -1320,25 +1349,62 @@ async def nodriver_ticketplus_check_queue_status(tab, config_dict, force_show_de
                     '\u8655\u7406\u4e2d'
                 ];
 
+                const failureKeywords = [
+                    '\u8cfc\u7968\u5931\u6557',
+                    '\u5df2\u552e\u5b8c',
+                    '\u5225\u4eba\u6436\u5148\u4e00\u6b65',
+                    '\u5df2\u7121\u53ef\u914d\u5ea7\u4f4d',
+                    '\u5df2\u88ab\u8cfc\u8cb7',
+                    '\u7121\u6cd5\u8cfc\u7968'
+                ];
+
                 const bodyText = document.body.textContent || '';
 
                 const hasQueueKeyword = queueKeywords.some(keyword => bodyText.includes(keyword));
 
-                const overlayScrim = document.querySelector('.v-overlay__scrim');
-                const hasOverlay = overlayScrim && overlayScrim.style.opacity === '1';
+                // Vuetify keeps every dialog mounted, so querySelector('.v-dialog')
+                // usually returns an inactive empty node and the failure veto below
+                // never fires -- which is how the failure popup got read as a queue
+                // in the first place (#389). Scan every *visible* dialog instead.
+                const isVisible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    if (!rect.width || !rect.height) return false;
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' &&
+                           style.visibility !== 'hidden' &&
+                           style.opacity !== '0';
+                };
 
-                const dialogText = document.querySelector('.v-dialog')?.textContent || '';
-                const hasQueueDialog = dialogText.includes('\u6392\u968a') ||
-                                       dialogText.includes('\u8acb\u7a0d\u5019');
+                const dialogTexts = Array.from(document.querySelectorAll('.v-dialog, [role="dialog"]'))
+                    .filter(isVisible)
+                    .map(el => (el.textContent || '').trim())
+                    .filter(text => text.length > 0);
+
+                const dialogText = dialogTexts.join(' | ');
+                const hasFailureDialog = dialogTexts.some(text =>
+                    failureKeywords.some(keyword => text.includes(keyword)));
+                const hasQueueDialog = !hasFailureDialog &&
+                                       dialogTexts.some(text =>
+                                           text.includes('\u6392\u968a') ||
+                                           text.includes('\u8acb\u7a0d\u5019'));
+
+                // A bare scrim is NOT a queue: every Vuetify dialog and loading
+                // mask draws one, so the order-failure popup used to be read as
+                // a queue and the monitor loop spun forever (#389). Queue
+                // wording decides now; the scrim is only reported back for the
+                // forced-debug dump below, never for the verdict.
+                const overlayScrim = document.querySelector('.v-overlay__scrim');
+                const hasOverlay = !!(overlayScrim && overlayScrim.style.opacity === '1');
 
                 const foundKeywords = queueKeywords.filter(keyword => bodyText.includes(keyword));
 
                 return {
-                    inQueue: hasQueueKeyword || hasOverlay || hasQueueDialog,
+                    inQueue: !hasFailureDialog && (hasQueueKeyword || hasQueueDialog),
                     queueTitle: '',
                     foundKeywords: foundKeywords,
                     hasOverlay: hasOverlay,
                     hasQueueDialog: hasQueueDialog,
+                    hasFailureDialog: hasFailureDialog,
                     dialogText: hasQueueDialog ? dialogText.trim() : ''
                 };
             })();
@@ -1348,6 +1414,14 @@ async def nodriver_ticketplus_check_queue_status(tab, config_dict, force_show_de
 
         if isinstance(result, dict):
             is_in_queue = result.get('inQueue', False)
+
+            # Logged unconditionally: a failure dialog forces inQueue false, so
+            # this never reaches the queue dump below. It is the one line that
+            # explains why a queue verdict was withheld, and the popup is rare
+            # enough that reporting every hit cannot flood the log.
+            if result.get('hasFailureDialog'):
+                debug.log("[QUEUE] Failure dialog present, not treating as queue")
+
             if is_in_queue and force_show_debug:
                 debug.log("[QUEUE] Queue status detected")
                 if result.get('hasOverlay'):
@@ -1396,6 +1470,108 @@ async def nodriver_ticketplus_confirm(tab, config_dict):
             pass
 
     return is_confirm_clicked
+
+
+async def _ticketplus_wait_after_submit(tab, config_dict, debug):
+    """Poll for the outcome of a submitted order instead of waiting blind.
+
+    The previous fixed 5-10s sleep left an order-failure popup sitting unhandled
+    for the whole window, and the queue check that followed mistook the popup's
+    overlay for a queue (#389).
+
+    Returns:
+        "confirmed"  -- confirmation page reached
+        "order_fail" -- failure popup detected (dismissed if possible)
+        "queue"      -- platform queue detected
+        "timeout"    -- none of the above within the wait budget
+    """
+    deadline = time.time() + CONST_TICKETPLUS_SUBMIT_WAIT_MAX
+
+    while time.time() < deadline:
+        if await check_and_handle_pause(config_dict):
+            return "timeout"
+
+        current_url = (tab.url or "").lower()
+        if '/confirm/' in current_url or '/confirmseat/' in current_url:
+            debug.log("[SUBMIT WAIT] Confirmation page reached")
+            return "confirmed"
+
+        if await nodriver_ticketplus_accept_order_fail(tab, debug) is True:
+            return "order_fail"
+
+        if await nodriver_ticketplus_check_queue_status(tab, config_dict):
+            debug.log("[SUBMIT WAIT] Platform queue detected")
+            return "queue"
+
+        if await sleep_with_pause_check(tab, CONST_TICKETPLUS_SUBMIT_POLL_INTERVAL, config_dict):
+            return "timeout"
+
+    debug.log("[SUBMIT WAIT] No outcome within wait budget")
+    return "timeout"
+
+
+async def _ticketplus_monitor_queue(tab, config_dict, debug):
+    """Watch the in-page queue until it clears, moves on, or the order fails.
+
+    The queue re-check keeps its randomized 5-10s cadence (anti-detection), but
+    the URL *and* the failure popup are polled every
+    CONST_TICKETPLUS_QUEUE_URL_POLL_INTERVAL seconds. Reading the popup out of the
+    local DOM sends no request, so it must not be rate-limited with the queue
+    check: doing so left the modal on screen for the whole randomized window
+    (5-10s, ~7.5s average) while it blocked every click on the page.
+
+    Gives up after CONST_TICKETPLUS_QUEUE_MONITOR_MAX: removing the scrim signal
+    fixed the popup that caused #389, but an unbounded loop would strand the bot
+    all the same the next time a dialog happens to carry queue wording.
+
+    Returns:
+        "confirmed"  -- confirmation page reached
+        "order_fail" -- failure popup detected (dismissed if possible)
+        "queue_end"  -- queue wording gone, resume normal page processing
+        "timeout"    -- monitor fuse blew, or paused / errored out
+    """
+    last_url = ""
+    monitor_deadline = time.time() + CONST_TICKETPLUS_QUEUE_MONITOR_MAX
+
+    while time.time() < monitor_deadline:
+        if await check_and_handle_pause(config_dict):
+            return "timeout"
+
+        try:
+            current_url = tab.url
+
+            if '/confirm/' in current_url.lower() or '/confirmseat/' in current_url.lower():
+                debug.log("Detected entry to confirmation page, exiting queue monitoring")
+                return "confirmed"
+
+            if current_url != last_url:
+                debug.log(f"Page status update - URL: {current_url}")
+                last_url = current_url
+
+            if await nodriver_ticketplus_accept_order_fail(tab, debug) is True:
+                debug.log("[QUEUE END] Order failure popup dismissed, exiting queue monitoring")
+                return "order_fail"
+
+            if not await nodriver_ticketplus_check_queue_status(tab, config_dict):
+                debug.log("[QUEUE END] Queue ended, continuing page processing")
+                return "queue_end"
+
+            recheck_deadline = time.time() + random.uniform(5.0, 10.0)
+            while time.time() < recheck_deadline:
+                if await sleep_with_pause_check(tab, CONST_TICKETPLUS_QUEUE_URL_POLL_INTERVAL, config_dict):
+                    return "timeout"
+                if tab.url != current_url:
+                    break
+                if await nodriver_ticketplus_accept_order_fail(tab, debug) is True:
+                    debug.log("[QUEUE END] Order failure popup dismissed mid-wait, exiting queue monitoring")
+                    return "order_fail"
+
+        except Exception as exc:
+            debug.log(f"Queue monitoring error: {exc}")
+            return "timeout"
+
+    debug.log("[QUEUE END] Queue monitoring hit its time limit, returning to main loop")
+    return "timeout"
 
 
 async def nodriver_ticketplus_order(tab, config_dict, ocr, Captcha_Browser):
@@ -1488,44 +1664,32 @@ async def nodriver_ticketplus_order(tab, config_dict, ocr, Captcha_Browser):
         is_form_submitted = await nodriver_ticketplus_click_next_button_unified(tab, config_dict)
 
         if is_form_submitted:
-            await tab.sleep(random.uniform(5.0, 10.0))
+            outcome = await _ticketplus_wait_after_submit(tab, config_dict, debug)
 
-            is_in_queue = await nodriver_ticketplus_check_queue_status(tab, config_dict, force_show_debug=False)
-            if is_in_queue:
-                debug.log("Entered queue monitoring (check every 5 seconds, display only on status change)")
+            if outcome == "order_fail":
+                debug.log("[ORDER FAIL] Popup dismissed after submit, refreshing ticket availability")
+                _state["order_page_visited"] = False
+                try:
+                    await tab.reload()
+                except Exception as reload_exc:
+                    debug.log(f"[ORDER FAIL] Reload failed: {reload_exc}")
+                return
 
-                last_url = ""
+            if outcome == "queue":
+                debug.log("Entered queue monitoring (recheck every 5-10 seconds, display only on status change)")
+                queue_outcome = await _ticketplus_monitor_queue(tab, config_dict, debug)
 
-                while True:
-                    if await check_and_handle_pause(config_dict):
-                        break
-
+                # Mirror the direct order_fail path above: the popup is gone but the
+                # ticket counts on screen are stale, so refresh before the next
+                # attempt instead of submitting against them.
+                if queue_outcome == "order_fail":
+                    debug.log("[ORDER FAIL] Popup dismissed during queue monitoring, refreshing ticket availability")
+                    _state["order_page_visited"] = False
                     try:
-                        current_url = tab.url
-
-                        if '/confirm/' in current_url.lower() or '/confirmseat/' in current_url.lower():
-                            debug.log("Detected entry to confirmation page, exiting queue monitoring")
-                            break
-
-                        if current_url != last_url:
-                            debug.log(f"Page status update - URL: {current_url}")
-                            last_url = current_url
-
-                        is_still_in_queue = await nodriver_ticketplus_check_queue_status(tab, config_dict, force_show_debug=False)
-
-                        if not is_still_in_queue:
-                            if '/confirm/' in current_url.lower() or '/confirmseat/' in current_url.lower():
-                                debug.log("Queue ended, entered confirmation page")
-                                break
-                            else:
-                                debug.log("[QUEUE END] Queue ended, continuing page processing")
-                                break
-
-                        await tab.sleep(random.uniform(5.0, 10.0))
-
-                    except Exception as exc:
-                        debug.log(f"Queue monitoring error: {exc}")
-                        break
+                        await tab.reload()
+                    except Exception as reload_exc:
+                        debug.log(f"[ORDER FAIL] Reload failed: {reload_exc}")
+                    return
 
         debug.log(f"Form submission: {'Success' if is_form_submitted else 'Failed'}")
     else:
