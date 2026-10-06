@@ -73,6 +73,7 @@
 - **platforms/ibon.py** - iBon + Tour iBon 平台（25 函式）
 - **platforms/kham.py** - KHAM + ticket.com.tw + UDN 平台（21 函式）
 - **platforms/hkticketing.py** - HKTicketing + GalaxyMacau + Ticketek 平台（30 函式）
+- **platforms/ctbc.py** - CTBC Sports 中信育樂售票網（12 函式）
 
 ### 🌐 支援平台清單
 
@@ -87,6 +88,7 @@
 - **Ticket.com.tw 年代** - https://ticket.com.tw/
 - **UDN售票網** - https://tickets.udnfunlife.com/
 - **TicketPlus 遠大** - https://ticketplus.com.tw/
+- **CTBC Sports 中信育樂售票** - https://tix.ctbcsports.com/
 
 #### 海外地區
 - **Urbtix 城市** - http://www.urbtix.hk/

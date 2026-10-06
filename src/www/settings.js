@@ -81,6 +81,7 @@ const ticketplus_account = document.querySelector('#ticketplus_account');
 const cityline_account = document.querySelector('#cityline_account');
 const urbtix_account = document.querySelector('#urbtix_account');
 const hkticketing_account = document.querySelector('#hkticketing_account');
+const ctbc_account = document.querySelector('#ctbc_account');
 
 const facebook_password = document.querySelector('#facebook_password');
 const kktix_password = document.querySelector('#kktix_password');
@@ -89,6 +90,7 @@ const kham_password = document.querySelector('#kham_password');
 const ticket_password = document.querySelector('#ticket_password');
 const udn_password = document.querySelector('#udn_password');
 const ticketplus_password = document.querySelector('#ticketplus_password');
+const ctbc_password = document.querySelector('#ctbc_password');
 const discount_code = document.querySelector('#discount_code');
 const urbtix_password = document.querySelector('#urbtix_password');
 const hkticketing_password = document.querySelector('#hkticketing_password');
@@ -630,6 +632,7 @@ function renderAutofillTabTranslations() {
     setInputGroupTexts('cityline_account', ['Email']);
     setInputGroupTexts('urbtix_account', ['Account', 'Password']);
     setInputGroupTexts('hkticketing_account', ['Account', 'Password']);
+    setInputGroupTexts('ctbc_account', ['Account', 'Password']);
 
     applyOrRestore('#cityline_account', 'placeholder', 'Enter your email address');
     setRowLabelForField('fansigo_account', 'FANSI GO');
@@ -640,6 +643,7 @@ function renderAutofillTabTranslations() {
     setRowLabelForField('ticket_account', 'Ticket.com.tw');
     setRowLabelForField('udn_account', 'UDN');
     setRowLabelForField('ticketplus_account', 'TicketPlus');
+    setRowLabelForField('ctbc_account', 'CTBC Sports');
     setRowLabelForField('cityline_account', 'Cityline');
     setRowLabelForField('urbtix_account', 'URBTIX');
     setRowLabelForField('hkticketing_account', 'HKTICKETING');
@@ -839,6 +843,7 @@ const PROFILE_PLATFORMS = [
     { slug: 'ticketplus',   label: 'TicketPlus 遠大',  homepage: 'https://ticketplus.com.tw' },
     { slug: 'funone',       label: 'FunOne',           homepage: 'https://tickets.funone.io' },
     { slug: 'fansigo',      label: 'FANSI GO',         homepage: 'https://go.fansi.me' },
+    { slug: 'ctbc',         label: '中信育樂售票',     homepage: 'https://tix.ctbcsports.com' },
     { slug: 'cityline',     label: 'Cityline',         homepage: 'https://www.cityline.com' },
     { slug: 'urbtix',       label: 'Urbtix',           homepage: 'https://ticket.urbtix.hk' },
     { slug: 'hkticketing',  label: 'HKTicketing',      homepage: 'https://hotshow.hkticketing.com/' },
@@ -1079,6 +1084,7 @@ const PLATFORM_MAP = [
     { key: 'hkticketing', domains: ['hkticketing.com', 'galaxymacau.com', 'ticketek.com'] },
     { key: 'funone',      domains: ['funone.io'] },
     { key: 'fansigo',     domains: ['fansi.me'] },
+    { key: 'ctbc',        domains: ['ctbcsports.com'] },
     { key: 'urbtix',      domains: ['urbtix.hk'] },
 ];
 
@@ -1292,6 +1298,7 @@ function load_settins_to_form(settings)
         cityline_account.value = settings.accounts.cityline_account;
         urbtix_account.value = settings.accounts.urbtix_account;
         hkticketing_account.value = settings.accounts.hkticketing_account;
+        ctbc_account.value = settings.accounts.ctbc_account || '';
 
         facebook_password.value = settings.accounts.facebook_password;
         kktix_password.value = settings.accounts.kktix_password;
@@ -1300,6 +1307,7 @@ function load_settins_to_form(settings)
         ticket_password.value = settings.accounts.ticket_password;
         udn_password.value = settings.accounts.udn_password;
         ticketplus_password.value = settings.accounts.ticketplus_password;
+        ctbc_password.value = settings.accounts.ctbc_password || '';
         discount_code.value = settings.advanced.discount_code || '';
         urbtix_password.value = settings.accounts.urbtix_password;
         hkticketing_password.value = settings.accounts.hkticketing_password;
@@ -1599,6 +1607,7 @@ function save_changes_to_dict(silent_flag)
             settings.accounts.cityline_account = cityline_account.value;
             settings.accounts.urbtix_account = urbtix_account.value;
             settings.accounts.hkticketing_account = hkticketing_account.value;
+            settings.accounts.ctbc_account = ctbc_account.value;
 
             settings.accounts.facebook_password = facebook_password.value;
             settings.accounts.kktix_password = kktix_password.value;
@@ -1607,6 +1616,7 @@ function save_changes_to_dict(silent_flag)
             settings.accounts.ticket_password = ticket_password.value;
             settings.accounts.udn_password = udn_password.value;
             settings.accounts.ticketplus_password = ticketplus_password.value;
+            settings.accounts.ctbc_password = ctbc_password.value;
             settings.advanced.discount_code = discount_code.value;
             settings.accounts.urbtix_password = urbtix_password.value;
             settings.accounts.hkticketing_password = hkticketing_password.value;
@@ -1733,6 +1743,7 @@ function check_unsaved_fields()
             "ticket_account",
             "udn_account",
             "ticketplus_account",
+            "ctbc_account",
             "facebook_password",
             "kktix_password",
             "fami_password",
@@ -1741,7 +1752,8 @@ function check_unsaved_fields()
             "kham_password",
             "ticket_password",
             "udn_password",
-            "ticketplus_password"
+            "ticketplus_password",
+            "ctbc_password"
         ];
         field_list_accounts.forEach(f => {
             const field = document.querySelector('#'+f);

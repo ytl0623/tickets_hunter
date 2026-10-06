@@ -189,6 +189,10 @@ def get_default_config():
     config_dict["tixcraft"]["auto_reload_coming_soon_page"] = True
     config_dict["tixcraft"]["allow_less_tickets"] = False
 
+    config_dict['ctbc']={}
+    config_dict["ctbc"]["pickup_method"] = "128"
+    config_dict["ctbc"]["payment_method"] = "1"
+
 
     # Contact information
     config_dict['contact']={}
@@ -214,6 +218,7 @@ def get_default_config():
     config_dict["accounts"]["ticket_account"] = ""
     config_dict["accounts"]["udn_account"] = ""
     config_dict["accounts"]["ticketplus_account"] = ""
+    config_dict["accounts"]["ctbc_account"] = ""
 
     config_dict["accounts"]["facebook_password"] = ""
     config_dict["accounts"]["kktix_password"] = ""
@@ -225,6 +230,7 @@ def get_default_config():
     config_dict["accounts"]["ticket_password"] = ""
     config_dict["accounts"]["udn_password"] = ""
     config_dict["accounts"]["ticketplus_password"] = ""
+    config_dict["accounts"]["ctbc_password"] = ""
 
     # Advanced settings (non-credential settings only)
     config_dict['advanced']={}

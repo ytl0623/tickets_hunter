@@ -273,6 +273,7 @@
                       <button type="button" class="btn btn-outline-primary btn-sm me-2 mb-2" onclick="fillHomepage('https://ticketplus.com.tw')">TicketPlus 遠大</button>
                       <button type="button" class="btn btn-outline-primary btn-sm me-2 mb-2" onclick="fillHomepage('https://tickets.funone.io')">FunOne Tickets</button>
                       <button type="button" class="btn btn-outline-primary btn-sm me-2 mb-2" onclick="fillHomepage('https://go.fansi.me')">FANSI GO</button>
+                      <button type="button" class="btn btn-outline-primary btn-sm me-2 mb-2" onclick="fillHomepage('https://tix.ctbcsports.com')">中信育樂售票</button>
                     </div>
 
                     <h6><strong>海外地區</strong></h6>
@@ -621,7 +622,7 @@
           </div>
         </div>
 
-        <div class="row mb-3" data-under="tixcraft kham ticket udn">
+        <div class="row mb-3" data-under="tixcraft kham ticket udn ctbc">
           <label class="col-sm-2 col-form-label">允許不連續座位<span class="help-icon" data-help="disable_adjacent_seat" title="停用相鄰座位說明" tabindex="0" role="button" aria-label="停用相鄰座位 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
@@ -675,7 +676,7 @@
             </div>
           </div>
         </div>
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label class="col-sm-2 col-form-label">OCR<span class="help-icon" data-help="ocr_captcha_enable" title="OCR 驗證碼辨識說明" tabindex="0" role="button" aria-label="OCR 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
@@ -685,7 +686,7 @@
           </div>
         </div>
 
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label for="ocr_captcha_image_source" class="col-sm-2 col-form-label">OCR圖片取得方式<span class="help-icon" data-help="ocr_captcha_image_source" title="OCR 圖片取得方式說明" tabindex="0" role="button" aria-label="OCR 圖片取得方式 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <select id="ocr_captcha_image_source" class="form-select" aria-label="Default select">
@@ -694,7 +695,7 @@
             </select>
           </div>
         </div>
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label class="col-sm-2 col-form-label">自動送出<span class="help-icon" data-help="ocr_captcha_force_submit" title="OCR 自動送出說明" tabindex="0" role="button" aria-label="自動送出 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
@@ -703,7 +704,7 @@
             </div>
           </div>
         </div>
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label class="col-sm-2 col-form-label">自訓練模型<span class="help-icon" data-help="ocr_captcha_use_universal" title="使用通用 OCR 模型說明" tabindex="0" role="button" aria-label="使用通用 OCR 模型 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <div class="form-check form-switch">
@@ -715,13 +716,13 @@
             </div>
           </div>
         </div>
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label for="remote_url" class="col-sm-2 col-form-label">OCR Server URL<span class="help-icon" data-help="remote_url" title="設定介面網址說明" tabindex="0" role="button" aria-label="設定介面網址 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="remote_url" value="" />
           </div>
         </div>
-        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus">
+        <div class="row mb-3" data-under="tixcraft ibon kham ticket udn famiticket funone ticketplus ctbc">
           <label for="ocr_model_path" class="col-sm-2 col-form-label">自訂 OCR 模型<span class="help-icon" data-help="ocr_model_path" title="自訂 OCR 模型說明" tabindex="0" role="button" aria-label="自訂 OCR 模型 說明"></span></label>
           <div class="col-sm-10 col-lg-8 col-xl-6">
             <input class="form-control" id="ocr_model_path" value="" placeholder="例如：assets/ocr_model 或 C:\models\my_ocr" />
@@ -1025,6 +1026,20 @@
               <input type="text" id="ticketplus_account" value="" class="form-control" autocomplete="username">
               <span class="input-group-text" id="inputGroup-sizing-default">密碼</span>
               <input type="password" id="ticketplus_password" value="" class="form-control" autocomplete="current-password">
+            </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="row mb-3" data-under="ctbc">
+          <label for="ctbc_account" class="col-sm-2 col-form-label">中信育樂</label>
+          <div class="col-sm-10 col-lg-8 col-xl-6">
+            <form autocomplete="off">
+            <div class="input-group">
+              <span class="input-group-text" id="inputGroup-sizing-default">帳號</span>
+              <input type="text" id="ctbc_account" value="" class="form-control" autocomplete="username">
+              <span class="input-group-text" id="inputGroup-sizing-default">密碼</span>
+              <input type="password" id="ctbc_password" value="" class="form-control" autocomplete="current-password">
             </div>
             </form>
           </div>

@@ -52,6 +52,7 @@ from platforms.tixcraft import *
 from platforms.ibon import *
 from platforms.kham import *
 from platforms.hkticketing import *
+from platforms.ctbc import *
 
 CONST_CITYLINE_SIGN_IN_URL = "https://www.cityline.com/Login.html?targetUrl=https%3A%2F%2Fwww.cityline.com%2FEvents.html"
 CONST_CITYLINE_HK_SIGN_IN_URL = "https://www.cityline.com.hk/Login.html?targetUrl=%s"
@@ -1029,6 +1030,10 @@ async def main(args):
         # FANSI GO Cognito login
         if FANSIGO_COGNITO_DOMAIN in url:
             await nodriver_fansigo_signin(tab, url, config_dict)
+
+        # CTBC Sports
+        if 'ctbcsports.com' in url:
+            tab = await nodriver_ctbc_main(tab, url, config_dict, ocr)
 
         # for facebook
         facebook_login_url = 'https://www.facebook.com/login.php?'
