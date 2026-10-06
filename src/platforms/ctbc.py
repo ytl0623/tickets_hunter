@@ -69,6 +69,9 @@ _state = {
     "shown_checkout_message": False,
     "login_attempted": False,
     "vip_login_attempted": False,
+    "last_cart_submit_time": 0.0,
+    "last_captcha_src": "",
+    "last_captcha_ans": "",
 }
 
 
@@ -105,44 +108,67 @@ def get_ctbc_page_type(url: str) -> str:
 
 
 async def nodriver_ctbc_extract_captcha_base64(tab, selector='#chk_pic, #master_chk_pic, img[src*="pic?TYPE="]'):
-    """Extract captcha image base64 bytes using canvas rendering."""
+    """Extract captcha image base64 bytes using canvas rendering with solid white background."""
     try:
         script = f'''
             (() => {{
                 const img = document.querySelector('{selector}');
-                if (!img || !img.complete || img.naturalWidth === 0) return null;
+                if (!img || !img.complete || (img.naturalWidth === 0 && img.width === 0)) return null;
                 const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
+                const w = img.naturalWidth || img.width;
+                const h = img.naturalHeight || img.height;
+                if (!w || !h) return null;
+                canvas.width = w;
+                canvas.height = h;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                return canvas.toDataURL('image/png');
+                // Fill opaque white background to prevent dark transparent PNG OCR artifacts
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                return {{
+                    dataUrl: canvas.toDataURL('image/png'),
+                    src: img.src || ''
+                }};
             }})()
         '''
-        data_url = await tab.evaluate(script)
-        if data_url and ',' in data_url:
-            base64_data = data_url.split(',', 1)[1]
-            return base64.b64decode(base64_data)
+        res_raw = await tab.evaluate(script)
+        res = util.parse_nodriver_result(res_raw)
+        if isinstance(res, dict) and res.get('dataUrl') and ',' in res['dataUrl']:
+            base64_data = res['dataUrl'].split(',', 1)[1]
+            return base64.b64decode(base64_data), res.get('src', '')
     except Exception:
         pass
-    return None
+    return None, ''
 
 
-async def nodriver_ctbc_dismiss_dialog(tab):
-    """Close any blocking jQuery UI popup dialogs."""
+async def nodriver_ctbc_dismiss_dialog(tab, config_dict=None):
+    """Close any blocking jQuery UI popup dialogs and log the alert message."""
+    debug = util.create_debug_logger(config_dict) if config_dict else None
     try:
-        await tab.evaluate('''
+        dialog_data_raw = await tab.evaluate('''
             (() => {
+                const dialogMsg = document.querySelector('#dialog-message, .ui-dialog-content');
+                let text = '';
+                if (dialogMsg) {
+                    text = dialogMsg.innerText.trim();
+                }
                 const dialogBtn = document.querySelector('.ui-dialog-buttonset button, .ui-dialog-titlebar-close');
                 if (dialogBtn && dialogBtn.offsetParent !== null) {
                     dialogBtn.click();
-                    return true;
+                    return { dismissed: true, text: text };
                 }
-                return false;
+                return { dismissed: false, text: text };
             })()
         ''')
+        data = util.parse_nodriver_result(dialog_data_raw)
+        if isinstance(data, dict) and data.get("dismissed"):
+            msg_text = data.get("text", "")
+            if debug and msg_text:
+                debug.log(f"[CTBC ALERT] Dismissed server popup dialog: '{msg_text}'")
+            return msg_text
     except Exception:
         pass
+    return None
 
 
 async def nodriver_ctbc_login(tab, config_dict, ocr):
@@ -233,7 +259,7 @@ async def nodriver_ctbc_login(tab, config_dict, ocr):
         # Captcha OCR
         if ocr and config_dict.get("ocr_captcha", {}).get("enable", True):
             for retry in range(3):
-                img_bytes = await nodriver_ctbc_extract_captcha_base64(tab, selector='#master_chk_pic')
+                img_bytes, _ = await nodriver_ctbc_extract_captcha_base64(tab, selector='#master_chk_pic')
                 if img_bytes:
                     try:
                         ans = ocr.classification(img_bytes)
@@ -340,7 +366,7 @@ async def nodriver_ctbc_vip_login(tab, config_dict, ocr):
         # OCR #chk_pic
         if ocr and config_dict.get("ocr_captcha", {}).get("enable", True):
             for retry in range(3):
-                img_bytes = await nodriver_ctbc_extract_captcha_base64(tab, selector='#chk_pic')
+                img_bytes, _ = await nodriver_ctbc_extract_captcha_base64(tab, selector='#chk_pic')
                 if img_bytes:
                     try:
                         ans = ocr.classification(img_bytes)
@@ -432,15 +458,17 @@ async def nodriver_ctbc_date_auto_select(tab, config_dict):
                 const rows = document.querySelectorAll('#PerformanceListTable tr, .ng-star-inserted tr');
                 const list = [];
                 rows.forEach((row, idx) => {
+                    // Skip table headers and rows inside thead
+                    if (row.querySelector('th') || row.closest('thead')) return;
                     const text = row.innerText.trim().replace(/\\s+/g, ' ');
-                    if (!text || text.includes('場次') && text.includes('時間')) return;
+                    if (!text || (text.includes('地點') && text.includes('名稱'))) return;
                     // Find clickable purchase / vip button
                     const btn = row.querySelector('button, a.learnmore, .btn, [onclick*="VipSellCheck"], [onclick*="doLink"], [onclick*="UTK"]');
-                    const hasAction = !!btn || text.includes('立即') || text.includes('訂購') || text.includes('預購') || text.includes('購買');
+                    if (!btn && !text.includes('立即') && !text.includes('訂購') && !text.includes('預購')) return;
                     list.push({
                         index: idx,
                         text: text,
-                        hasAction: hasAction,
+                        hasAction: !!btn,
                         disabled: row.innerText.includes('已售完') || row.innerText.includes('暫無票券')
                     });
                 });
@@ -532,9 +560,42 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
     area_mode = config_dict.get("area_auto_select", {}).get("mode", CONST_FROM_TOP_TO_BOTTOM)
 
     try:
+        # Check if already on direct ticket count page (e.g. UTK0202_) without area list
+        is_direct_qty_page = await tab.evaluate('''
+            (() => {
+                const hasAmountInput = document.querySelector('#AMOUNT, input[KEY="TYPE_ID"], #table_tickettype');
+                const hasAreaElements = document.querySelector('table.salesTable tr, tr.main, table tr[onclick], tr.status_tr, .area_item, select#PRICE');
+                return {
+                    isDirect: !!hasAmountInput && !hasAreaElements
+                };
+            })()
+        ''')
+        page_info = util.parse_nodriver_result(is_direct_qty_page)
+        if isinstance(page_info, dict) and page_info.get("isDirect"):
+            debug.log("[CTBC AREA] Direct ticket quantity page (no area table required)")
+            return True
+
         areas_raw = await tab.evaluate('''
             (() => {
-                // Table rows or cards
+                // 1. Check select#PRICE dropdown
+                const priceSelect = document.querySelector('select#PRICE');
+                if (priceSelect && priceSelect.options.length > 1) {
+                    const selectList = [];
+                    for (let i = 0; i < priceSelect.options.length; i++) {
+                        const opt = priceSelect.options[i];
+                        if (opt.value && opt.value !== '-1') {
+                            selectList.push({
+                                index: i,
+                                text: opt.text.trim(),
+                                isSelect: true,
+                                soldOut: opt.text.includes('售完') || opt.text.includes('0張')
+                            });
+                        }
+                    }
+                    if (selectList.length > 0) return selectList;
+                }
+
+                // 2. Table rows or cards
                 const rows = document.querySelectorAll('table.salesTable tr, tr.main, table tr[onclick], tr.status_tr, .area_item');
                 const list = [];
                 rows.forEach((row, idx) => {
@@ -544,6 +605,7 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                     list.push({
                         index: idx,
                         text: text,
+                        isSelect: false,
                         soldOut: isSoldOut
                     });
                 });
@@ -593,9 +655,20 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
 
         if target_area:
             idx = target_area.get("index", 0)
-            debug.log(f"[CTBC AREA] Clicking area index {idx}...")
+            is_sel = target_area.get("isSelect", False)
+            debug.log(f"[CTBC AREA] Selecting area index {idx} (isSelect={is_sel})...")
             await tab.evaluate(f'''
                 (() => {{
+                    if ({str(is_sel).lower()}) {{
+                        const priceSelect = document.querySelector('select#PRICE');
+                        if (priceSelect && priceSelect.selectedIndex !== {idx}) {{
+                            priceSelect.selectedIndex = {idx};
+                            priceSelect.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            if (typeof changeArea === 'function') changeArea();
+                            return true;
+                        }}
+                        return true;
+                    }}
                     const rows = document.querySelectorAll('table.salesTable tr, tr.main, table tr[onclick], tr.status_tr, .area_item');
                     const row = rows[{idx}];
                     if (row) {{
@@ -618,36 +691,65 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
 
 
 async def nodriver_ctbc_assign_ticket_number(tab, config_dict):
-    """Set the desired ticket quantity."""
-    ticket_number = str(config_dict.get("ticket_number", 1))
+    """Set the desired ticket quantity, respecting QUANTITY_LIMIT and FIRST_QTY_LIMIT."""
+    requested_qty = int(config_dict.get("ticket_number", 1))
     debug = util.create_debug_logger(config_dict)
 
     try:
-        await tab.evaluate(f'''
+        qty_result_raw = await tab.evaluate(f'''
             (() => {{
-                const targetQty = '{ticket_number}';
+                const reqQty = {requested_qty};
+                let maxLimit = 99;
+                const qLimitEl = document.querySelector('#QUANTITY_LIMIT');
+                if (qLimitEl && parseInt(qLimitEl.value) > 0) {{
+                    maxLimit = Math.min(maxLimit, parseInt(qLimitEl.value));
+                }}
+                const firstLimitEl = document.querySelector('#FIRST_QTY_LIMIT');
+                if (firstLimitEl && parseInt(firstLimitEl.value) > 0) {{
+                    maxLimit = Math.min(maxLimit, parseInt(firstLimitEl.value));
+                }}
+                const targetQty = Math.max(1, Math.min(reqQty, maxLimit));
+
+                let changed = false;
                 // 1. Check AMOUNT input
                 const inputs = document.querySelectorAll('#AMOUNT, input.numbox, input.yd_counterNum, div.qty-select input');
                 inputs.forEach(input => {{
-                    if (input && (input.value === '' || input.value === '0')) {{
-                        input.value = targetQty;
+                    if (input && input.value !== targetQty.toString()) {{
+                        input.value = targetQty.toString();
                         input.dispatchEvent(new Event('input', {{ bubbles: true }}));
                         input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                        changed = true;
                     }}
                 }});
 
                 // 2. Check SELECT dropdown
                 const selects = document.querySelectorAll('select#AMOUNT, select.ticket-qty, select[name*="amount"]');
                 selects.forEach(sel => {{
-                    if (sel) {{
-                        sel.value = targetQty;
+                    if (sel && sel.value !== targetQty.toString()) {{
+                        sel.value = targetQty.toString();
                         sel.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        changed = true;
                     }}
                 }});
+
+                return {{
+                    requested: reqQty,
+                    assigned: targetQty,
+                    limit: maxLimit,
+                    changed: changed
+                }};
             }})()
         ''')
-        debug.log(f"[CTBC COUNT] Ticket quantity set to {ticket_number}")
-        return True
+        qty_info = util.parse_nodriver_result(qty_result_raw)
+        if isinstance(qty_info, dict):
+            assigned = qty_info.get("assigned", requested_qty)
+            limit = qty_info.get("limit", 99)
+            if assigned < requested_qty:
+                debug.log(f"[CTBC COUNT] Requested {requested_qty} tickets, but page limit is {limit}. Adjusted quantity to {assigned}.")
+            else:
+                debug.log(f"[CTBC COUNT] Ticket quantity set to {assigned}")
+            return True
     except Exception as exc:
         debug.log(f"[CTBC COUNT] Set quantity exception: {exc}")
         return False
@@ -660,9 +762,21 @@ async def nodriver_ctbc_captcha_handler(tab, config_dict, ocr):
     if not ocr or not config_dict.get("ocr_captcha", {}).get("enable", True):
         return False
 
-    img_bytes = await nodriver_ctbc_extract_captcha_base64(tab, selector='#chk_pic, img[src*="pic?TYPE="]')
+    img_bytes, img_src = await nodriver_ctbc_extract_captcha_base64(tab, selector='#chk_pic, img[src*="pic?TYPE="]')
     if not img_bytes:
         return False
+
+    # Check current input value
+    current_val_raw = await tab.evaluate('''
+        (() => {
+            const input = document.querySelector('#CHK, #AMOUNT_CHK, input[name*="chk"]');
+            return input ? input.value.trim() : '';
+        })()
+    ''')
+    current_ans = util.parse_nodriver_result(current_val_raw)
+    if _state.get("last_captcha_src") == img_src and current_ans and len(current_ans) == 4:
+        # Same image already solved and input field filled
+        return True
 
     debug.log("[CTBC CAPTCHA] Found captcha image, running OCR...")
     try:
@@ -671,6 +785,8 @@ async def nodriver_ctbc_captcha_handler(tab, config_dict, ocr):
             ans = ans.strip()
             debug.log(f"[CTBC CAPTCHA] OCR result: {ans}")
             if len(ans) == 4:
+                _state["last_captcha_src"] = img_src
+                _state["last_captcha_ans"] = ans
                 await tab.evaluate(f'''
                     (() => {{
                         const input = document.querySelector('#CHK, #AMOUNT_CHK, input[name*="chk"]');
@@ -685,13 +801,14 @@ async def nodriver_ctbc_captcha_handler(tab, config_dict, ocr):
                 return True
             else:
                 # Refresh captcha
+                debug.log(f"[CTBC CAPTCHA] OCR length mismatch ({len(ans)} != 4), refreshing captcha...")
                 await tab.evaluate('''
                     (() => {
-                        const changPic = document.querySelector('#chang_pic');
+                        const changPic = document.querySelector('#chang_pic, #master_chang_pic');
                         if (changPic) changPic.click();
                     })()
                 ''')
-                await tab.sleep(0.5)
+                await tab.sleep(0.6)
     except Exception as exc:
         debug.log(f"[CTBC CAPTCHA] Exception during OCR: {exc}")
 
@@ -882,8 +999,18 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
     page_type = get_ctbc_page_type(url)
     debug.log(f"[CTBC] Current page type: {page_type} (URL: {url})")
 
-    # Dismiss any unhandled alert dialogs
-    await nodriver_ctbc_dismiss_dialog(tab)
+    # Dismiss any unhandled alert dialogs and log text
+    dismissed_alert = await nodriver_ctbc_dismiss_dialog(tab, config_dict)
+    if dismissed_alert:
+        debug.log(f"[CTBC] Dismissed server alert: '{dismissed_alert}'")
+        if "加入購物車失敗" in dismissed_alert or "驗證碼" in dismissed_alert:
+            await tab.evaluate('''
+                (() => {
+                    const changPic = document.querySelector('#chang_pic, #master_chang_pic');
+                    if (changPic) changPic.click();
+                })()
+            ''')
+            await tab.sleep(0.8)
 
     # 1. Checkout page (UTK0206_)
     if page_type == "checkout":
@@ -911,9 +1038,19 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
         # Handle Captcha if present
         is_captcha_solved = await nodriver_ctbc_captcha_handler(tab, config_dict, ocr)
 
-        # Add to cart
-        if is_captcha_solved or not config_dict.get("ocr_captcha", {}).get("enable", True):
+        # Add to cart with in-flight check and cooldown
+        now = time.time()
+        last_submit = _state.get("last_cart_submit_time", 0.0)
+        cooldown_ok = (now - last_submit) >= 2.0
+
+        if (is_captcha_solved or not config_dict.get("ocr_captcha", {}).get("enable", True)) and cooldown_ok:
+            is_pending = await tab.evaluate('typeof isClick !== "undefined" && isClick === true')
+            if is_pending:
+                debug.log("[CTBC] addShoppingCart() request is already in-flight, waiting...")
+                return tab
+
             debug.log("[CTBC] Clicking add to cart...")
+            _state["last_cart_submit_time"] = now
             await tab.evaluate('''
                 (() => {
                     if (typeof addShoppingCart === 'function') {
@@ -928,7 +1065,7 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
                     return false;
                 })()
             ''')
-            await tab.sleep(1.0)
+            await tab.sleep(1.2)
         return tab
 
     # 5. Homepage / Login page
