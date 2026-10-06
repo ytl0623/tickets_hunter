@@ -67,6 +67,7 @@ _state = {
     "checkout_submitted_time": 0.0,
     "checkout_halted": False,
     "shown_halt_message": False,
+    "cart_added": False,
     "played_sound_order": False,
     "shown_checkout_message": False,
     "login_attempted": False,
@@ -946,9 +947,7 @@ async def nodriver_ctbc_checkout(tab, config_dict):
             }})()
         ''')
 
-    # Step 6: 勾選最下面兩個勾選項目 (Check the bottom two checkboxes)
-    # 1. 約定條款 (#agreen)
-    # 2. 運動幣 (#M_DONGZI_COUPONS)
+    # Step 6: 勾選約定條款 (#agreen)，不勾選使用運動幣 (#M_DONGZI_COUPONS)
     checkbox_result_raw = await tab.evaluate('''
         (() => {
             let agreenFound = false;
@@ -956,7 +955,7 @@ async def nodriver_ctbc_checkout(tab, config_dict):
             let agreenChecked = false;
             let dongziChecked = false;
 
-            // 1. #agreen
+            // 1. #agreen (條款同意) - 勾選
             const agreen = document.querySelector('#agreen');
             if (agreen) {
                 agreenFound = true;
@@ -968,51 +967,30 @@ async def nodriver_ctbc_checkout(tab, config_dict):
                 agreenChecked = agreen.checked;
             }
 
-            // 2. #M_DONGZI_COUPONS
+            // 2. #M_DONGZI_COUPONS (使用運動幣) - 不要勾選 (若被勾選則取消)
             const dongzi = document.querySelector('#M_DONGZI_COUPONS');
             if (dongzi) {
                 dongziFound = true;
-                if (!dongzi.checked) {
-                    dongzi.click();
-                    if (!dongzi.checked) {
-                        dongzi.checked = true;
-                        dongzi.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                }
-                // Call InitDongZi if defined and sports deposit table not yet populated
-                if (typeof InitDongZi === 'function') {
-                    const sportsTable = document.querySelector('#sportsdeposit2');
-                    if (!sportsTable || sportsTable.children.length === 0) {
+                if (dongzi.checked) {
+                    dongzi.checked = false;
+                    dongzi.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (typeof InitDongZi === 'function') {
                         InitDongZi();
                     }
                 }
                 dongziChecked = dongzi.checked;
             }
 
-            // 3. Fallback: also ensure the last two checkboxes on the checkout page are checked
-            const allCbs = Array.from(document.querySelectorAll('#paybill input[type="checkbox"], .checkRead input[type="checkbox"]'));
-            if (allCbs.length >= 2) {
-                const lastTwo = allCbs.slice(-2);
-                lastTwo.forEach(cb => {
-                    if (!cb.checked) {
-                        cb.click();
-                        cb.checked = true;
-                        cb.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                });
-            }
-
             return {
                 agreenFound: agreenFound,
                 dongziFound: dongziFound,
                 agreenChecked: agreenChecked,
-                dongziChecked: dongziChecked,
-                totalCheckboxes: allCbs.length
+                dongziChecked: dongziChecked
             };
         })()
     ''')
     cb_info = util.parse_nodriver_result(checkbox_result_raw)
-    debug.log(f"[CTBC CHECKOUT] Checked bottom checkboxes status: {cb_info}")
+    debug.log(f"[CTBC CHECKOUT] Checked agreement status: {cb_info}")
 
     # Check if user explicitly wants auto-submit
     auto_submit = config_dict.get("ctbc", {}).get("auto_submit_checkout", False)
@@ -1052,7 +1030,7 @@ async def nodriver_ctbc_checkout(tab, config_dict):
     else:
         # "之後就不要動" -> Halt automation on checkout page and notify user to complete manually
         _state["checkout_halted"] = True
-        debug.log("[SUCCESS] [CTBC CHECKOUT] 結帳頁面最下方兩個選項已勾選完成（約定條款 #agreen、運動幣 #M_DONGZI_COUPONS）！")
+        debug.log("[SUCCESS] [CTBC CHECKOUT] 結帳頁面約定條款 (#agreen) 已勾選完成，使用運動幣 (#M_DONGZI_COUPONS) 保持不勾選！")
         debug.log("[CTBC CHECKOUT] 依指示停止後續動作（之後就不要動），請手動完成後續付款與確認！")
 
         if not _state["played_sound_order"]:
@@ -1085,6 +1063,9 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
         _state["shown_halt_message"] = False
         _state["played_sound_order"] = False
 
+    if page_type in ("checkout", "event"):
+        _state["cart_added"] = False
+
     # 1. Checkout page (UTK0206_)
     if page_type == "checkout":
         if _state.get("checkout_halted"):
@@ -1099,6 +1080,18 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
     dismissed_alert = await nodriver_ctbc_dismiss_dialog(tab, config_dict)
     if dismissed_alert:
         debug.log(f"[CTBC] Dismissed server alert: '{dismissed_alert}'")
+        if "加入購物車完成" in dismissed_alert:
+            debug.log("[CTBC] Cart addition successful! Navigating to checkout page...")
+            _state["cart_added"] = True
+            await tab.evaluate('''
+                (() => {
+                    const vr = typeof _vr !== 'undefined' ? _vr : '/DEA/';
+                    location.href = vr + 'UTK0206_';
+                })()
+            ''')
+            await tab.sleep(0.5)
+            return tab
+
         if "加入購物車失敗" in dismissed_alert or "驗證碼" in dismissed_alert:
             await tab.evaluate('''
                 (() => {
@@ -1120,6 +1113,10 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
 
     # 4. Area selection pages (UTK0201_001, UTK0202, UTK0204, UTK0205)
     if page_type in ("area_computer", "area_voucher", "area_table", "seat_map"):
+        if _state.get("cart_added"):
+            debug.log("[CTBC] Cart addition already completed, waiting for navigation to checkout page (UTK0206_)...")
+            return tab
+
         # Select Area
         await nodriver_ctbc_area_auto_select(tab, config_dict)
 
@@ -1134,7 +1131,7 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
         last_submit = _state.get("last_cart_submit_time", 0.0)
         cooldown_ok = (now - last_submit) >= 2.0
 
-        if (is_captcha_solved or not config_dict.get("ocr_captcha", {}).get("enable", True)) and cooldown_ok:
+        if (is_captcha_solved or not config_dict.get("ocr_captcha", {}).get("enable", True)) and cooldown_ok and not _state.get("cart_added"):
             is_pending = await tab.evaluate('typeof isClick !== "undefined" && isClick === true')
             if is_pending:
                 debug.log("[CTBC] addShoppingCart() request is already in-flight, waiting...")
