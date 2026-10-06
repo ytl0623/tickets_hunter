@@ -65,6 +65,8 @@ CONST_CTBC_SUBMIT_COOLDOWN = 10.0
 _state = {
     "checkout_submitted": False,
     "checkout_submitted_time": 0.0,
+    "checkout_halted": False,
+    "shown_halt_message": False,
     "played_sound_order": False,
     "shown_checkout_message": False,
     "login_attempted": False,
@@ -819,33 +821,39 @@ async def nodriver_ctbc_checkout(tab, config_dict):
     """
     Handle the shopping cart and checkout process on UTK0206_.
     Stages:
-    1. Check cart items
+    1. Check cart items / ready state
     2. Click '前往結帳' (#Checkout) if #paybill is hidden
     3. Select pickup method (#GET_METOD_ROOT, prefer 128 APP e-ticket)
     4. Select payment method (#PAY_METOD_ROOT, prefer 1 Credit card)
     5. Fill credit card fields (if applicable)
-    6. Check agreement terms (#agreen)
-    7. Click '送出結帳' (chkNext)
-    8. Send notifications & play sound
+    6. Check the bottom two checkboxes:
+       - Agreement terms (#agreen)
+       - Sports coins (#M_DONGZI_COUPONS)
+    7. Halt automation ('之後就不要動') and notify user to complete checkout manually.
+       (Or submit via chkNext if auto_submit_checkout is explicitly enabled)
     """
     debug = util.create_debug_logger(config_dict)
-    now = time.time()
 
-    if _state.get("checkout_submitted"):
-        if (now - _state.get("checkout_submitted_time", 0.0)) < CONST_CTBC_SUBMIT_COOLDOWN:
-            debug.log("[CTBC CHECKOUT] Checkout submission in cooldown, waiting for response...")
-            return True
+    if _state.get("checkout_halted"):
+        return True
 
     debug.log("[CTBC CHECKOUT] Processing UTK0206_ checkout page...")
 
     # Step 1: Check if cart has items
     has_items = await tab.evaluate('''
         (() => {
+            const cartCount = document.querySelector('.cartCount');
+            if (cartCount && parseInt(cartCount.innerText.trim()) > 0) return true;
             const normal = document.querySelector('#normalTicket, .orders');
             const pkg = document.querySelector('#packageTicket');
             const season = document.querySelector('#seasonTicket');
             const text = (normal ? normal.innerText : '') + (pkg ? pkg.innerText : '') + (season ? season.innerText : '');
-            return text.trim().length > 0;
+            if (text.trim().length > 0) return true;
+            const paybill = document.querySelector('#paybill');
+            if (paybill && window.getComputedStyle(paybill).display !== 'none') return true;
+            const checkoutBtn = document.querySelector('#Checkout');
+            if (checkoutBtn) return true;
+            return false;
         })()
     ''')
     if not has_items:
@@ -876,7 +884,7 @@ async def nodriver_ctbc_checkout(tab, config_dict):
                 return false;
             })()
         ''')
-        await tab.sleep(1.0)
+        await tab.sleep(0.8)
 
     # Step 3: Select pickup method (取票方式)
     # 128 = APP電子票 (0元服務費), 64 = 7-11 ibon, 1 = 現場取票, 4 = 現場入口取票
@@ -904,7 +912,7 @@ async def nodriver_ctbc_checkout(tab, config_dict):
     await tab.sleep(0.3)
 
     # Step 4: Select payment method (付款方式)
-    # 1 = 信用卡, 32 = ATM 虛擬帳號
+    # 1 = 信用卡, 32 = ATM 虛擬帳號 (Note: 運動幣規定需搭配信用卡付款)
     pay_pref = config_dict.get("ctbc", {}).get("payment_method", "1")
     await tab.evaluate(f'''
         (() => {{
@@ -927,7 +935,6 @@ async def nodriver_ctbc_checkout(tab, config_dict):
 
     # Step 5: Fill credit card fields if Credit Card payment (1) is active
     card_number = config_dict.get("contact", {}).get("credit_card_prefix", "").strip()
-    # If 16 digits provided in config, fill it
     if len(card_number) == 16:
         await tab.evaluate(f'''
             (() => {{
@@ -939,47 +946,120 @@ async def nodriver_ctbc_checkout(tab, config_dict):
             }})()
         ''')
 
-    # Step 6: Check agreement terms (#agreen)
-    await tab.evaluate('''
+    # Step 6: 勾選最下面兩個勾選項目 (Check the bottom two checkboxes)
+    # 1. 約定條款 (#agreen)
+    # 2. 運動幣 (#M_DONGZI_COUPONS)
+    checkbox_result_raw = await tab.evaluate('''
         (() => {
+            let agreenFound = false;
+            let dongziFound = false;
+            let agreenChecked = false;
+            let dongziChecked = false;
+
+            // 1. #agreen
             const agreen = document.querySelector('#agreen');
-            if (agreen && !agreen.checked) {
-                agreen.checked = true;
-                agreen.dispatchEvent(new Event('change', { bubbles: true }));
-                agreen.click();
+            if (agreen) {
+                agreenFound = true;
+                if (!agreen.checked) {
+                    agreen.checked = true;
+                    agreen.dispatchEvent(new Event('input', { bubbles: true }));
+                    agreen.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                agreenChecked = agreen.checked;
             }
+
+            // 2. #M_DONGZI_COUPONS
+            const dongzi = document.querySelector('#M_DONGZI_COUPONS');
+            if (dongzi) {
+                dongziFound = true;
+                if (!dongzi.checked) {
+                    dongzi.click();
+                    if (!dongzi.checked) {
+                        dongzi.checked = true;
+                        dongzi.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+                // Call InitDongZi if defined and sports deposit table not yet populated
+                if (typeof InitDongZi === 'function') {
+                    const sportsTable = document.querySelector('#sportsdeposit2');
+                    if (!sportsTable || sportsTable.children.length === 0) {
+                        InitDongZi();
+                    }
+                }
+                dongziChecked = dongzi.checked;
+            }
+
+            // 3. Fallback: also ensure the last two checkboxes on the checkout page are checked
+            const allCbs = Array.from(document.querySelectorAll('#paybill input[type="checkbox"], .checkRead input[type="checkbox"]'));
+            if (allCbs.length >= 2) {
+                const lastTwo = allCbs.slice(-2);
+                lastTwo.forEach(cb => {
+                    if (!cb.checked) {
+                        cb.click();
+                        cb.checked = true;
+                        cb.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+            }
+
+            return {
+                agreenFound: agreenFound,
+                dongziFound: dongziFound,
+                agreenChecked: agreenChecked,
+                dongziChecked: dongziChecked,
+                totalCheckboxes: allCbs.length
+            };
         })()
     ''')
-    await tab.sleep(0.2)
+    cb_info = util.parse_nodriver_result(checkbox_result_raw)
+    debug.log(f"[CTBC CHECKOUT] Checked bottom checkboxes status: {cb_info}")
 
-    # Step 7: Click Submit Checkout (送出結帳 / chkNext)
-    debug.log("[CTBC CHECKOUT] Submitting order via chkNext()...")
-    submit_result = await tab.evaluate('''
-        (() => {
-            if (typeof chkNext === 'function') {
-                chkNext();
-                return true;
-            }
-            const btn = document.querySelector('button[onclick*="chkNext"]');
-            if (btn) {
-                btn.click();
-                return true;
-            }
-            return false;
-        })()
-    ''')
+    # Check if user explicitly wants auto-submit
+    auto_submit = config_dict.get("ctbc", {}).get("auto_submit_checkout", False)
+    if auto_submit:
+        now = time.time()
+        if _state.get("checkout_submitted"):
+            if (now - _state.get("checkout_submitted_time", 0.0)) < CONST_CTBC_SUBMIT_COOLDOWN:
+                debug.log("[CTBC CHECKOUT] Checkout submission in cooldown, waiting for response...")
+                return True
 
-    if submit_result:
-        _state["checkout_submitted"] = True
-        _state["checkout_submitted_time"] = time.time()
-        debug.log("[SUCCESS] CTBC Sports order submitted successfully!")
+        debug.log("[CTBC CHECKOUT] Submitting order via chkNext()...")
+        submit_result = await tab.evaluate('''
+            (() => {
+                if (typeof chkNext === 'function') {
+                    chkNext();
+                    return true;
+                }
+                const btn = document.querySelector('button[onclick*="chkNext"]');
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+                return false;
+            })()
+        ''')
+        if submit_result:
+            _state["checkout_submitted"] = True
+            _state["checkout_submitted_time"] = time.time()
+            debug.log("[SUCCESS] CTBC Sports order submitted successfully!")
+            if not _state["played_sound_order"]:
+                if config_dict.get("advanced", {}).get("play_sound", {}).get("order", True):
+                    play_sound_while_ordering(config_dict)
+                send_discord_notification(config_dict, "order", "CTBC Sports")
+                send_telegram_notification(config_dict, "order", "CTBC Sports")
+                _state["played_sound_order"] = True
+            return True
+    else:
+        # "之後就不要動" -> Halt automation on checkout page and notify user to complete manually
+        _state["checkout_halted"] = True
+        debug.log("[SUCCESS] [CTBC CHECKOUT] 結帳頁面最下方兩個選項已勾選完成（約定條款 #agreen、運動幣 #M_DONGZI_COUPONS）！")
+        debug.log("[CTBC CHECKOUT] 依指示停止後續動作（之後就不要動），請手動完成後續付款與確認！")
 
-        # Step 8: Play sound & send notifications (once)
         if not _state["played_sound_order"]:
             if config_dict.get("advanced", {}).get("play_sound", {}).get("order", True):
                 play_sound_while_ordering(config_dict)
-            send_discord_notification(config_dict, "order", "CTBC Sports")
-            send_telegram_notification(config_dict, "order", "CTBC Sports")
+            send_discord_notification(config_dict, "order", "CTBC Sports (Checkout Reached)")
+            send_telegram_notification(config_dict, "order", "CTBC Sports (Checkout Reached)")
             _state["played_sound_order"] = True
 
         return True
@@ -999,7 +1079,23 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
     page_type = get_ctbc_page_type(url)
     debug.log(f"[CTBC] Current page type: {page_type} (URL: {url})")
 
-    # Dismiss any unhandled alert dialogs and log text
+    # Reset checkout halted state if navigated away from checkout
+    if page_type != "checkout":
+        _state["checkout_halted"] = False
+        _state["shown_halt_message"] = False
+        _state["played_sound_order"] = False
+
+    # 1. Checkout page (UTK0206_)
+    if page_type == "checkout":
+        if _state.get("checkout_halted"):
+            if not _state.get("shown_halt_message"):
+                debug.log("[CTBC CHECKOUT] Automation halted on checkout page ('之後就不要動'). Waiting for manual user action.")
+                _state["shown_halt_message"] = True
+            return tab
+        await nodriver_ctbc_checkout(tab, config_dict)
+        return tab
+
+    # Dismiss any unhandled alert dialogs and log text (outside checkout page)
     dismissed_alert = await nodriver_ctbc_dismiss_dialog(tab, config_dict)
     if dismissed_alert:
         debug.log(f"[CTBC] Dismissed server alert: '{dismissed_alert}'")
@@ -1011,11 +1107,6 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
                 })()
             ''')
             await tab.sleep(0.8)
-
-    # 1. Checkout page (UTK0206_)
-    if page_type == "checkout":
-        await nodriver_ctbc_checkout(tab, config_dict)
-        return tab
 
     # 2. VIP Priority Purchase modal check (can appear on event or area pages)
     vip_handled = await nodriver_ctbc_vip_login(tab, config_dict, ocr)
