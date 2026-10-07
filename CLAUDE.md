@@ -116,6 +116,7 @@ nodriver_tixcraft  ->  platforms/*  ->  nodriver_common  ->  util / settings
 | `platforms/hkticketing.py` | HKTicketing 快達票、澳門銀河、Ticketek |
 | `platforms/fansigo.py` | FANSI GO |
 | `platforms/funone.py` | FunOne |
+| `platforms/ctbc.py` | CTBC Sports 中信育樂（新北中信特攻 DEA、中信兄弟 BROTHERS） |
 | `platforms/facebook.py` | Facebook 登入輔助 |
 
 ---

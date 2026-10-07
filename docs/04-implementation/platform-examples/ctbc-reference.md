@@ -45,8 +45,9 @@
 | Stage 3 | `nodriver_ctbc_dismiss_dialog()` | 自動關閉阻礙性彈窗 |
 | Stage 4 | `nodriver_ctbc_date_auto_select()` | 動態場次列表解析與日期關鍵字選擇 |
 | Stage 5 | `nodriver_ctbc_area_auto_select()` | 票區自動選擇與條件式遞補 |
-| Stage 6 | `nodriver_ctbc_assign_ticket_number()` | 自動設定購票張數 |
-| Stage 7 | `nodriver_ctbc_captcha_handler()` | 圖形驗證碼辨識與自動重試 |
+| Stage 6 | `nodriver_ctbc_assign_ticket_number()` | 自動設定購票張數（支援多票種與限購） |
+| Stage 7 | `nodriver_ctbc_captcha_handler()` | 圖形驗證碼單次輪詢辨識與自動重試 |
+| Stage 8 | `nodriver_ctbc_submit_cart_and_monitor()` | 快速送出購物車與低延遲伺服器回應輪詢 |
 | Stage 9 & 10 | `nodriver_ctbc_checkout()` | 購物車展開、取票/付款方式選擇、條款勾選與送出結帳 |
 
 ---

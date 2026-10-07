@@ -1032,7 +1032,7 @@ async def main(args):
             await nodriver_fansigo_signin(tab, url, config_dict)
 
         # CTBC Sports
-        if 'ctbcsports.com' in url:
+        if is_ctbc_url(url):
             tab = await nodriver_ctbc_main(tab, url, config_dict, ocr)
 
         # for facebook
