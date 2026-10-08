@@ -44,8 +44,10 @@ __all__ = [
     "nodriver_ctbc_dismiss_dialog",
     "nodriver_ctbc_login",
     "nodriver_ctbc_vip_login",
+    "nodriver_ctbc_home_auto_select",
     "nodriver_ctbc_date_auto_select",
     "nodriver_ctbc_area_auto_select",
+    "nodriver_ctbc_seat_auto_select",
     "nodriver_ctbc_assign_ticket_number",
     "nodriver_ctbc_captcha_handler",
     "nodriver_ctbc_submit_cart_and_monitor",
@@ -82,6 +84,15 @@ _state = {
     "last_captcha_ans": "",
     "last_perf_reload_time": 0.0,
     "sold_out_areas": set(),
+    "last_seat_selection_time": 0.0,
+    "last_home_click_time": 0.0,
+    "last_date_click_time": 0.0,
+    "last_area_click_time": 0.0,
+    "last_page_type": "",
+    "last_logged_url": "",
+    "navigating_back": False,
+    "no_creds_logged": False,
+    "logged_in_logged": False,
 }
 
 
@@ -114,6 +125,7 @@ def get_ctbc_page_type(url: str) -> str:
         return "login"
     if (
         "utk0101" in url_lower
+        or "utk0102" in url_lower
         or url_lower.rstrip("/").endswith("ctbcsports.com")
         or ("/dea" in url_lower and not ("utk02" in url_lower or "utk13" in url_lower))
         or ("/brothers" in url_lower and not ("utk02" in url_lower or "utk13" in url_lower))
@@ -245,7 +257,9 @@ async def nodriver_ctbc_login(tab, config_dict, ocr):
             })()
         ''')
         if isinstance(login_status, dict) and login_status.get("loggedIn"):
-            debug.log(f"[CTBC LOGIN] Already logged in as {login_status.get('user', 'member')}")
+            if not _state.get("logged_in_logged"):
+                debug.log(f"[CTBC LOGIN] Already logged in as {login_status.get('user', 'member')}")
+                _state["logged_in_logged"] = True
             return True
     except Exception as exc:
         debug.log(f"[CTBC LOGIN] Error checking login status: {exc}")
@@ -258,7 +272,9 @@ async def nodriver_ctbc_login(tab, config_dict, ocr):
         password = config_dict.get("accounts", {}).get("kham_password", "").strip()
 
     if not account or not password:
-        debug.log("[CTBC LOGIN] No CTBC credentials configured, skipping auto-login")
+        if not _state.get("no_creds_logged"):
+            debug.log("[CTBC LOGIN] No CTBC credentials configured, skipping auto-login")
+            _state["no_creds_logged"] = True
         return False
 
     # Check if login modal is present
@@ -461,12 +477,129 @@ async def nodriver_ctbc_vip_login(tab, config_dict, ocr):
         return False
 
 
+async def nodriver_ctbc_home_auto_select(tab, config_dict):
+    """
+    Auto-select match on CTBC homepage (UTK0101_) or game list (UTK0102_).
+    Matches against date_keyword or game_name, or clicks first available match.
+    """
+    debug = util.create_debug_logger(config_dict)
+
+    now = time.time()
+    if (now - _state.get("last_home_click_time", 0.0)) < 1.2:
+        return False
+
+    date_keyword = config_dict.get("date_auto_select", {}).get("date_keyword", "").strip()
+    game_name = config_dict.get("game_name", "").strip()
+    target_kw = date_keyword or game_name
+    keyword_exclude = config_dict.get("keyword_exclude", "").strip()
+    date_auto_fallback = config_dict.get("date_auto_fallback", False)
+
+    try:
+        page_info = await tab.evaluate('''
+            (() => {
+                const links = document.querySelectorAll(
+                    '.container a[href*="UTK0201_"], #calendar a[href*="UTK0201_"], .royalSlider a[href*="UTK0201_"], #promoteEvent a[href*="UTK0201_"], a[href*="UTK0201_"]'
+                );
+                const items = [];
+                links.forEach((a, idx) => {
+                    const text = a.innerText.trim().replace(/\\s+/g, ' ');
+                    const href = a.getAttribute('href') || a.href || '';
+                    if (href && href.indexOf('UTK0201_') >= 0) {
+                        items.push({ index: idx, text: text, href: href });
+                    }
+                });
+                const hasMenuList = !!document.querySelector('#menu_category a[href*="UTK0102_"]');
+                return { items: items, hasMenuList: hasMenuList };
+            })()
+        ''')
+
+        if not isinstance(page_info, dict):
+            return False
+
+        items = page_info.get("items", [])
+        keywords = util.parse_keyword_string_to_array(target_kw) if target_kw else []
+
+        target_item = None
+        if keywords:
+            for kw in keywords:
+                for it in items:
+                    t = it.get("text", "")
+                    h = it.get("href", "")
+                    if keyword_exclude and util.reset_row_text_if_match_keyword_exclude(config_dict, t):
+                        continue
+                    if util.is_text_match_keyword(kw, t) or util.is_text_match_keyword(kw, h):
+                        target_item = it
+                        debug.log(f"[CTBC HOME] Matched match '{t}' with keyword '{kw}'")
+                        break
+                if target_item:
+                    break
+
+        if not target_item:
+            if date_auto_fallback and items:
+                target_item = items[0]
+                debug.log(f"[CTBC HOME] Fallback selected first match: '{target_item.get('text')}'")
+            elif page_info.get("hasMenuList") and not items:
+                _state["last_home_click_time"] = time.time()
+                debug.log("[CTBC HOME] Navigating to match list (UTK0102_)...")
+                await tab.evaluate('''
+                    (() => {
+                        const menuBtn = document.querySelector('#menu_category a[href*="UTK0102_"]');
+                        if (menuBtn) {
+                            menuBtn.click();
+                        } else {
+                            let basePath = (typeof _vr !== 'undefined' && _vr) ? _vr : '';
+                            if (!basePath) {
+                                const m = location.pathname.match(/^(\\/[^\\/]+\\/)/);
+                                basePath = m ? m[1] : '/BROTHERS/';
+                            }
+                            location.href = basePath + 'UTK0102_?TYPE=4';
+                        }
+                    })()
+                ''')
+                await asyncio.sleep(0.1)
+                return True
+
+        if target_item:
+            _state["last_home_click_time"] = time.time()
+            idx = target_item.get("index", 0)
+            href = target_item.get("href", "")
+            debug.log(f"[CTBC HOME] Clicking match link index {idx} ({href})...")
+            await tab.evaluate(f'''
+                (() => {{
+                    const links = document.querySelectorAll(
+                        '.container a[href*="UTK0201_"], #calendar a[href*="UTK0201_"], .royalSlider a[href*="UTK0201_"], #promoteEvent a[href*="UTK0201_"], a[href*="UTK0201_"]'
+                    );
+                    const a = links[{idx}];
+                    if (a) {{
+                        a.click();
+                        return true;
+                    }}
+                    if ({json.dumps(href)}) {{
+                        location.href = {json.dumps(href)};
+                        return true;
+                    }}
+                    return false;
+                }})()
+            ''')
+            await asyncio.sleep(0.1)
+            return True
+
+    except Exception as exc:
+        debug.log(f"[CTBC HOME] Auto select match error: {exc}")
+
+    return False
+
+
 async def nodriver_ctbc_date_auto_select(tab, config_dict):
     """Auto-select performance date / session on UTK0201_ event page with fast loading and polling."""
     debug = util.create_debug_logger(config_dict)
 
     if not config_dict.get("date_auto_select", {}).get("enable", True):
         debug.log("[CTBC DATE] Date auto select disabled")
+        return False
+
+    now = time.time()
+    if (now - _state.get("last_date_click_time", 0.0)) < 3.0:
         return False
 
     date_keyword = config_dict.get("date_auto_select", {}).get("date_keyword", "").strip()
@@ -583,6 +716,7 @@ async def nodriver_ctbc_date_auto_select(tab, config_dict):
                 return False
 
         if target_item:
+            _state["last_date_click_time"] = time.time()
             idx = target_item.get("index", 0)
             debug.log(f"[CTBC DATE] Clicking target performance row index {idx}...")
             await tab.evaluate(f'''
@@ -594,6 +728,13 @@ async def nodriver_ctbc_date_auto_select(tab, config_dict):
                         'button, a.learnmore, .btn, [onclick*="VipSellCheck"], [onclick*="doLink"], [onclick*="UTK"], [onclick*="buy"], input[type="button"]'
                     );
                     if (btn) {{
+                        const href = btn.getAttribute('href') || '';
+                        if (href.toLowerCase().startsWith('javascript:')) {{
+                            try {{
+                                eval(href.replace(/^javascript:/i, '').trim());
+                                return true;
+                            }} catch (e) {{}}
+                        }}
                         btn.click();
                         return true;
                     }}
@@ -615,7 +756,8 @@ async def nodriver_ctbc_date_auto_select(tab, config_dict):
 async def nodriver_ctbc_area_auto_select(tab, config_dict):
     """
     Auto-select ticket price area with single-roundtrip DOM inspection,
-    sold-out caching, and accurate keyword filtering.
+    supporting table rows (tr.saleTr on UTK0204_), dropdowns, and cards.
+    Filters out sold-out areas and matches area name or ticket price.
     """
     debug = util.create_debug_logger(config_dict)
 
@@ -623,7 +765,15 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
         debug.log("[CTBC AREA] Area auto select disabled")
         return {"status": "disabled"}
 
+    now = time.time()
+    if (now - _state.get("last_area_click_time", 0.0)) < 3.5:
+        return {"status": "cooldown"}
+
     area_keyword = config_dict.get("area_auto_select", {}).get("area_keyword", "").strip()
+    price_keyword = (
+        config_dict.get("area_auto_select", {}).get("price_keyword", "")
+        or config_dict.get("ctbc", {}).get("price_keyword", "")
+    ).strip()
     keyword_exclude = config_dict.get("keyword_exclude", "").strip()
     area_auto_fallback = config_dict.get("area_auto_fallback", False)
     area_mode = config_dict.get("area_auto_select", {}).get("mode", CONST_FROM_TOP_TO_BOTTOM)
@@ -632,7 +782,7 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
         # Consolidated inspection of the area page
         page_data = await tab.evaluate('''
             (() => {
-                const soldOutPattern = /已售完|售完|0\\s*張|已售罄|暫無票券|目前無票|已無票券/;
+                const soldOutPattern = /已售完|售完|0\\s*張|已售罄|暫無票券|目前無票|已無票券|已結束/;
 
                 // 1. Check select#PRICE dropdown
                 const priceSelect = document.querySelector('select#PRICE, select[id$="_PRICE"]');
@@ -647,6 +797,7 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                                 text: opt.text.trim(),
                                 value: opt.value,
                                 isSelect: true,
+                                isSaleTr: false,
                                 isCurrent: priceSelect.selectedIndex === i,
                                 soldOut: isSoldOut
                             });
@@ -657,7 +808,46 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                     }
                 }
 
-                // 2. Check table rows or area cards
+                // 2. Check tr.saleTr (UTK0204_ / UTK0203_)
+                const saleRows = document.querySelectorAll('tr.saleTr, table.f1 tr.saleTr');
+                if (saleRows.length > 0) {
+                    const rowList = [];
+                    saleRows.forEach((row, idx) => {
+                        const areaTd = row.querySelector('[data-title*="票區"]') || (row.cells && row.cells.length > 1 ? row.cells[1] : null);
+                        const priceTd = row.querySelector('[data-title*="票價"]') || (row.cells && row.cells.length > 2 ? row.cells[2] : null);
+                        const seatTd = row.querySelector('[data-title*="空位"]') || (row.cells && row.cells.length > 3 ? row.cells[3] : null);
+
+                        const areaName = areaTd ? areaTd.innerText.trim() : '';
+                        const price = priceTd ? priceTd.innerText.trim() : '';
+                        const seatStatus = seatTd ? seatTd.innerText.trim() : '';
+                        const rel = row.getAttribute('rel') || '';
+
+                        if (!areaName && !price) return;
+
+                        const isSoldOut = soldOutPattern.test(seatStatus)
+                            || seatStatus === '0'
+                            || row.classList.contains('Soldout')
+                            || row.classList.contains('soldout')
+                            || row.classList.contains('disabled');
+
+                        rowList.push({
+                            index: idx,
+                            areaName: areaName,
+                            price: price,
+                            seatStatus: seatStatus,
+                            text: `${areaName} ${price} ${seatStatus}`.trim(),
+                            rel: rel,
+                            isSelect: false,
+                            isSaleTr: true,
+                            soldOut: isSoldOut
+                        });
+                    });
+                    if (rowList.length > 0) {
+                        return { type: 'sale_tr', items: rowList };
+                    }
+                }
+
+                // 3. Check generic table rows or area cards
                 const rows = document.querySelectorAll('table.salesTable tr, tr.main, table tr[onclick], tr.status_tr, .area_item');
                 if (rows.length > 0) {
                     const rowList = [];
@@ -675,6 +865,7 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                             index: idx,
                             text: text,
                             isSelect: false,
+                            isSaleTr: false,
                             soldOut: isSoldOut
                         });
                     });
@@ -683,7 +874,7 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                     }
                 }
 
-                // 3. Check direct ticket count page (e.g. UTK0202_ without area list)
+                // 4. Check direct ticket count page (e.g. UTK0202_ without area list)
                 const hasAmountInput = document.querySelector('#AMOUNT, input[KEY="TYPE_ID"], #table_tickettype');
                 if (hasAmountInput) {
                     return { type: 'direct', items: [] };
@@ -703,24 +894,25 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
 
         area_items = page_data.get("items", [])
         if not area_items:
-            debug.log("[CTBC AREA] No area candidates found on page")
             return {"status": "none"}
 
         # Exclude areas known to be sold out from previous submissions
         sold_out_cache = _state.get("sold_out_areas", set())
 
         target_area = None
-        keywords = util.parse_keyword_string_to_array(area_keyword) if area_keyword else []
+        target_kw = area_keyword or price_keyword
+        keywords = util.parse_keyword_string_to_array(target_kw) if target_kw else []
 
         if keywords:
             for kw in keywords:
                 for area in area_items:
                     text = area.get("text", "")
-                    if area.get("soldOut") or text in sold_out_cache:
+                    area_name = area.get("areaName", "")
+                    if area.get("soldOut") or text in sold_out_cache or (area_name and area_name in sold_out_cache):
                         continue
                     if keyword_exclude and util.reset_row_text_if_match_keyword_exclude(config_dict, text):
                         continue
-                    if util.is_text_match_keyword(kw, text):
+                    if util.is_text_match_keyword(kw, text) or (area_name and util.is_text_match_keyword(kw, area_name)):
                         target_area = area
                         debug.log(f"[CTBC AREA] Matched area '{text}' with keyword '{kw}'")
                         break
@@ -731,7 +923,10 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
             if area_auto_fallback:
                 available = [
                     a for a in area_items
-                    if not a.get("soldOut") and a.get("text") not in sold_out_cache and not (
+                    if not a.get("soldOut")
+                    and a.get("text") not in sold_out_cache
+                    and (not a.get("areaName") or a.get("areaName") not in sold_out_cache)
+                    and not (
                         keyword_exclude and util.reset_row_text_if_match_keyword_exclude(config_dict, a.get("text", ""))
                     )
                 ]
@@ -746,11 +941,12 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
         if target_area:
             idx = target_area.get("index", 0)
             is_sel = target_area.get("isSelect", False)
+            is_sale_tr = target_area.get("isSaleTr", False)
+            rel = target_area.get("rel", "")
 
             if is_sel:
                 # Dropdown mode
                 if target_area.get("isCurrent"):
-                    # Already selected!
                     return {"status": "ready"}
 
                 debug.log(f"[CTBC AREA] Selecting dropdown option index {idx}...")
@@ -766,8 +962,49 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                 ''')
                 await asyncio.sleep(0.05)
                 return {"status": "ready"}
+            elif is_sale_tr:
+                _state["last_area_click_time"] = time.time()
+                debug.log(f"[CTBC AREA] Clicking table area row index {idx} (rel='{rel}', text='{target_area.get('text')}')...")
+                await tab.evaluate(f'''
+                    (() => {{
+                        const saleRows = document.querySelectorAll('tr.saleTr, table.f1 tr.saleTr');
+                        const row = saleRows[{idx}];
+                        if (row) {{
+                            const rel = row.getAttribute('rel') || {json.dumps(rel)};
+                            if (rel) {{
+                                const mapArea = document.getElementById(rel) || document.querySelector(`area#${{rel}}`);
+                                if (mapArea) {{
+                                    const aHref = mapArea.getAttribute('href') || '';
+                                    if (aHref.toLowerCase().startsWith('javascript:')) {{
+                                        try {{
+                                            eval(aHref.replace(/^javascript:/i, '').trim());
+                                            return true;
+                                        }} catch (e) {{}}
+                                    }}
+                                    mapArea.click();
+                                }}
+                            }}
+                            const aTag = row.querySelector('a');
+                            if (aTag) {{
+                                const aHref = aTag.getAttribute('href') || '';
+                                if (aHref.toLowerCase().startsWith('javascript:')) {{
+                                    try {{
+                                        eval(aHref.replace(/^javascript:/i, '').trim());
+                                        return true;
+                                    }} catch (e) {{}}
+                                }}
+                            }}
+                            row.click();
+                            return true;
+                        }}
+                        return false;
+                    }})()
+                ''')
+                await asyncio.sleep(0.05)
+                return {"status": "navigated"}
             else:
                 # Table row / card mode: clicking will navigate to seat/ticket page
+                _state["last_area_click_time"] = time.time()
                 debug.log(f"[CTBC AREA] Clicking table area row index {idx}...")
                 await tab.evaluate(f'''
                     (() => {{
@@ -775,12 +1012,21 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
                         const row = rows[{idx}];
                         if (row) {{
                             const btn = row.querySelector('button, a, input[type="button"], input[type="submit"]');
-                            if (btn) btn.click();
-                            else row.click();
+                            if (btn) {{
+                                const href = btn.getAttribute('href') || '';
+                                if (href.toLowerCase().startsWith('javascript:')) {{
+                                    try {{
+                                        eval(href.replace(/^javascript:/i, '').trim());
+                                        return true;
+                                    }} catch (e) {{}}
+                                }}
+                                btn.click();
+                            }} else {{
+                                row.click();
+                            }}
                         }}
                     }})()
                 ''')
-                # Must yield immediately so browser navigates to seat map / quantity page!
                 await asyncio.sleep(0.05)
                 return {"status": "navigated"}
 
@@ -789,6 +1035,304 @@ async def nodriver_ctbc_area_auto_select(tab, config_dict):
         return {"status": "error"}
 
     return {"status": "none"}
+
+
+async def nodriver_ctbc_seat_auto_select(tab, config_dict):
+    """
+    Auto-select ticket type and pick seats on CTBC seat map page (UTK0205_).
+    1. Select ticket type (prefer 全票 or ticket_type_keyword, avoid disability unless configured).
+    2. Pick contiguous/available empty seats in #TBL up to ticket_number limit.
+    """
+    debug = util.create_debug_logger(config_dict)
+    ticket_type_kw = (
+        config_dict.get("ctbc", {}).get("ticket_type_keyword", "")
+        or config_dict.get("ticket_type_keyword", "")
+    ).strip()
+    keyword_exclude = config_dict.get("keyword_exclude", "").strip()
+    requested_qty = int(config_dict.get("ticket_number", 1))
+
+    try:
+        # 1. Inspect seat map and ticket buttons in single roundtrip
+        page_info = await tab.evaluate('''
+            (() => {
+                const tbl = document.querySelector('#TBL');
+                if (!tbl || typeof seats === 'undefined' || Object.keys(seats).length === 0) {
+                    return { status: 'loading' };
+                }
+
+                const ticketBtns = document.querySelectorAll('.ticket button:not(#tdtextlocation)');
+                if (!ticketBtns || ticketBtns.length === 0) {
+                    return { status: 'loading' };
+                }
+
+                const typeList = [];
+                ticketBtns.forEach((btn, idx) => {
+                    const numDiv = btn.querySelector('div.checkNum');
+                    const typeId = numDiv ? (numDiv.id || numDiv.getAttribute('id')) : '';
+                    const typeVal = numDiv ? (numDiv.getAttribute('val') || '') : '';
+                    const text = btn.innerText.trim().replace(/\\s+/g, ' ');
+                    const count = numDiv ? parseInt(numDiv.innerText.trim() || '0', 10) : 0;
+                    const color = numDiv ? (numDiv.getAttribute('color') || '') : '';
+                    typeList.push({
+                        index: idx,
+                        id: typeId,
+                        val: typeVal,
+                        text: text,
+                        count: isNaN(count) ? 0 : count,
+                        color: color
+                    });
+                });
+
+                let totalSelected = 0;
+                for (const k in seats) {
+                    if (seats[k].A === 'S') totalSelected++;
+                }
+
+                let maxLimit = 99;
+                const qLimitEl = document.querySelector('#QUANTITY_LIMIT');
+                if (qLimitEl && parseInt(qLimitEl.value) > 0) {
+                    maxLimit = Math.min(maxLimit, parseInt(qLimitEl.value));
+                }
+                const firstLimitEl = document.querySelector('#FIRST_QTY_LIMIT');
+                if (firstLimitEl && parseInt(firstLimitEl.value) > 0) {
+                    maxLimit = Math.min(maxLimit, parseInt(firstLimitEl.value));
+                }
+
+                let emptyCount = 0;
+                for (const k in seats) {
+                    if (seats[k].S == 0 && (!seats[k].A || seats[k].A === '')) {
+                        emptyCount++;
+                    }
+                }
+
+                const curType = (typeof currType !== 'undefined' && currType) ? currType : '';
+                const curTypeName = (typeof currTypeName !== 'undefined' && currTypeName) ? currTypeName : '';
+
+                return {
+                    status: 'ready',
+                    types: typeList,
+                    totalSelected: totalSelected,
+                    maxLimit: maxLimit,
+                    emptyCount: emptyCount,
+                    currType: curType,
+                    currTypeName: curTypeName
+                };
+            })()
+        ''')
+
+        if not isinstance(page_info, dict) or page_info.get("status") == "loading":
+            debug.log("[CTBC SEAT] Seat map or ticket types still loading...")
+            return {"status": "loading"}
+
+        total_selected = page_info.get("totalSelected", 0)
+        max_limit = page_info.get("maxLimit", 99)
+        target_qty = max(1, min(requested_qty, max_limit))
+        empty_count = page_info.get("emptyCount", 0)
+        types = page_info.get("types", [])
+
+        # Check if already fulfilled
+        if total_selected >= target_qty:
+            debug.log(f"[CTBC SEAT] Target quantity fulfilled ({total_selected}/{target_qty} selected)")
+            return {"status": "ready", "selected": total_selected, "target": target_qty}
+
+        # Check if area is completely sold out
+        if empty_count == 0 and total_selected == 0:
+            debug.log("[CTBC SEAT] No empty seats available in this area!")
+            return {"status": "sold_out"}
+
+        # 2. Select ticket type
+        target_type = None
+        concession_pattern = re.compile(r'身心障礙|輪椅|愛心|陪伴|半票|學生|優待')
+
+        if ticket_type_kw:
+            keywords = util.parse_keyword_string_to_array(ticket_type_kw)
+            for kw in keywords:
+                for t in types:
+                    text = t.get("text", "")
+                    val = t.get("val", "")
+                    if keyword_exclude and (
+                        util.is_text_match_keyword(keyword_exclude, text)
+                        or util.is_text_match_keyword(keyword_exclude, val)
+                    ):
+                        continue
+                    if util.is_text_match_keyword(kw, text) or util.is_text_match_keyword(kw, val):
+                        target_type = t
+                        debug.log(f"[CTBC SEAT] Matched ticket type '{text}' with keyword '{kw}'")
+                        break
+                if target_type:
+                    break
+
+        if not target_type:
+            # Default: prefer "全票", avoid concession/disability
+            for t in types:
+                text = t.get("text", "")
+                val = t.get("val", "")
+                if keyword_exclude and (
+                    util.is_text_match_keyword(keyword_exclude, text)
+                    or util.is_text_match_keyword(keyword_exclude, val)
+                ):
+                    continue
+                if concession_pattern.search(text) or concession_pattern.search(val):
+                    continue
+                if "全票" in text or "全票" in val:
+                    target_type = t
+                    debug.log(f"[CTBC SEAT] Default selected ticket type: '{text}'")
+                    break
+
+        if not target_type:
+            # Fallback to first non-concession type, or first type
+            non_concession = [
+                t for t in types
+                if not concession_pattern.search(t.get("text", ""))
+                and not concession_pattern.search(t.get("val", ""))
+            ]
+            target_type = non_concession[0] if non_concession else types[0]
+            debug.log(f"[CTBC SEAT] Fallback ticket type: '{target_type.get('text')}'")
+
+        needed = target_qty - total_selected
+        target_id = target_type.get("id", "")
+        target_val = target_type.get("val", "")
+        target_idx = target_type.get("index", 0)
+
+        debug.log(f"[CTBC SEAT] Selecting ticket type '{target_val}' (id={target_id}) and picking {needed} seats...")
+
+        # 3. Pick seats in DOM
+        pick_res = await tab.evaluate(f'''
+            (() => {{
+                const targetId = {json.dumps(target_id)};
+                const targetVal = {json.dumps(target_val)};
+                const targetIdx = {target_idx};
+                const needed = {needed};
+
+                // Set ticket type
+                if (typeof setType === 'function') {{
+                    setType(targetId, targetVal);
+                }}
+                const btns = document.querySelectorAll('.ticket button:not(#tdtextlocation)');
+                if (btns && btns[targetIdx]) {{
+                    btns[targetIdx].click();
+                }}
+
+                const table = document.querySelector('#TBL');
+                if (!table || typeof seats === 'undefined') return {{ picked: 0, finalSelected: 0 }};
+
+                const candidates = [];
+                for (const k in seats) {{
+                    const s = seats[k];
+                    if (s.S == 0 && (!s.A || s.A === '')) {{
+                        const x = parseInt(k.substring(1, 3), 10);
+                        const y = parseInt(k.substring(3, 5), 10);
+                        const name = s.I || '';
+                        const rowMatch = name.match(/-(\\d+)排/);
+                        const seatMatch = name.match(/-(\\d+)號/);
+                        const rowNum = rowMatch ? parseInt(rowMatch[1], 10) : y;
+                        const seatNum = seatMatch ? parseInt(seatMatch[1], 10) : x;
+
+                        candidates.push({{
+                            key: k,
+                            name: name,
+                            x: x,
+                            y: y,
+                            rowNum: rowNum,
+                            seatNum: seatNum
+                        }});
+                    }}
+                }}
+
+                if (candidates.length === 0) return {{ picked: 0, finalSelected: 0 }};
+
+                // Group by row to find contiguous seats
+                const rowMap = {{}};
+                candidates.forEach(c => {{
+                    if (!rowMap[c.rowNum]) rowMap[c.rowNum] = [];
+                    rowMap[c.rowNum].push(c);
+                }});
+
+                let selectedList = [];
+
+                // Try to find contiguous seats in the same row
+                for (const r in rowMap) {{
+                    const rowSeats = rowMap[r];
+                    rowSeats.sort((a, b) => a.seatNum - b.seatNum);
+
+                    for (let i = 0; i <= rowSeats.length - needed; i++) {{
+                        let isContiguous = true;
+                        for (let j = 0; j < needed - 1; j++) {{
+                            const diff = rowSeats[i + j + 1].seatNum - rowSeats[i + j].seatNum;
+                            if (diff !== 1 && diff !== 2) {{
+                                isContiguous = false;
+                                break;
+                            }}
+                        }}
+                        if (isContiguous) {{
+                            selectedList = rowSeats.slice(i, i + needed);
+                            break;
+                        }}
+                    }}
+                    if (selectedList.length === needed) break;
+                }}
+
+                // Fallback: pick any available seats in the same row or any row
+                if (selectedList.length < needed) {{
+                    candidates.sort((a, b) => {{
+                        if (a.rowNum !== b.rowNum) return a.rowNum - b.rowNum;
+                        return a.seatNum - b.seatNum;
+                    }});
+                    selectedList = candidates.slice(0, needed);
+                }}
+
+                // Click each cell
+                let pickedCount = 0;
+                selectedList.forEach(item => {{
+                    let cell = null;
+                    if (table.rows[item.y] && table.rows[item.y].cells[item.x]) {{
+                        cell = table.rows[item.y].cells[item.x];
+                    }}
+                    if (!cell && item.name) {{
+                        cell = document.querySelector(`#TBL td[title="${{CSS.escape(item.name)}}"]`);
+                    }}
+                    if (cell) {{
+                        if (typeof $ !== 'undefined') {{
+                            $(cell).trigger('click');
+                        }} else {{
+                            cell.click();
+                        }}
+                        pickedCount++;
+                    }}
+                }});
+
+                // Dismiss checkPi row-change alert dialog if triggered
+                const dialogBtn = document.querySelector('.ui-dialog-buttonset button, .ui-dialog-buttonpane button, .ui-button');
+                if (dialogBtn && dialogBtn.offsetParent !== null) {{
+                    dialogBtn.click();
+                }}
+
+                let finalSelected = 0;
+                for (const k in seats) {{
+                    if (seats[k].A === 'S') finalSelected++;
+                }}
+
+                return {{
+                    picked: pickedCount,
+                    finalSelected: finalSelected,
+                    pickedNames: selectedList.map(s => s.name)
+                }};
+            }})()
+        ''')
+
+        if isinstance(pick_res, dict):
+            final_sel = pick_res.get("finalSelected", 0)
+            picked_names = pick_res.get("pickedNames", [])
+            debug.log(f"[CTBC SEAT] Picked {pick_res.get('picked')} seats: {picked_names} (total selected: {final_sel}/{target_qty})")
+            if final_sel >= target_qty:
+                return {"status": "ready", "selected": final_sel, "target": target_qty}
+            elif final_sel > 0:
+                return {"status": "partial", "selected": final_sel, "target": target_qty}
+
+    except Exception as exc:
+        debug.log(f"[CTBC SEAT] Seat selection exception: {exc}")
+
+    return {"status": "error"}
 
 
 async def nodriver_ctbc_assign_ticket_number(tab, config_dict):
@@ -1234,7 +1778,21 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
 
     debug = util.create_debug_logger(config_dict)
     page_type = get_ctbc_page_type(url)
-    debug.log(f"[CTBC] Current page type: {page_type} (URL: {url})")
+    last_page_type = _state.get("last_page_type", "")
+    if page_type != last_page_type:
+        _state["last_page_type"] = page_type
+        _state["navigating_back"] = False
+        if page_type == "area_table":
+            _state["last_area_click_time"] = 0.0
+        elif page_type == "event":
+            _state["last_date_click_time"] = 0.0
+        elif page_type == "home":
+            _state["last_home_click_time"] = 0.0
+
+    last_logged_url = _state.get("last_logged_url", "")
+    if url != last_logged_url:
+        _state["last_logged_url"] = url
+        debug.log(f"[CTBC] Current page type: {page_type} (URL: {url})")
 
     # Reset checkout halted state if navigated away from checkout
     if page_type != "checkout":
@@ -1253,6 +1811,7 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
             if not _state.get("shown_halt_message"):
                 debug.log("[CTBC CHECKOUT] Automation halted on checkout page ('之後就不要動'). Waiting for manual user action.")
                 _state["shown_halt_message"] = True
+            await asyncio.sleep(0.5)
             return tab
         await nodriver_ctbc_checkout(tab, config_dict)
         return tab
@@ -1269,7 +1828,7 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
                     let basePath = (typeof _vr !== 'undefined' && _vr) ? _vr : '';
                     if (!basePath) {
                         const m = location.pathname.match(/^(\\/[^\\/]+\\/)/);
-                        basePath = m ? m[1] : '/DEA/';
+                        basePath = m ? m[1] : '/BROTHERS/';
                     }
                     location.href = basePath + 'UTK0206_';
                 })()
@@ -1297,16 +1856,120 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
         await nodriver_ctbc_date_auto_select(tab, config_dict)
         return tab
 
-    # 4. Area selection pages (UTK0201_001, UTK0202, UTK0204, UTK0205)
-    if page_type in ("area_computer", "area_voucher", "area_table", "seat_map"):
+    # 4. Area selection table pages (UTK0204_, UTK0203_)
+    if page_type == "area_table":
         if _state.get("cart_added"):
             debug.log("[CTBC] Cart addition already completed, waiting for navigation to checkout page (UTK0206_)...")
             return tab
 
-        # Select Area
         area_res = await nodriver_ctbc_area_auto_select(tab, config_dict)
         if area_res.get("status") == "navigated":
-            # Clicked a row to navigate into area/seat map; let browser navigate!
+            return tab
+        if area_res.get("status") == "no_match":
+            auto_reload_interval = config_dict.get("advanced", {}).get("auto_reload_page_interval", 0)
+            now = time.time()
+            if auto_reload_interval > 0:
+                last_reload = _state.get("last_perf_reload_time", 0.0)
+                if (now - last_reload) >= auto_reload_interval:
+                    debug.log(f"[CTBC AREA] No available target area. Reloading area page (interval={auto_reload_interval}s)...")
+                    _state["last_perf_reload_time"] = now
+                    try:
+                        await tab.reload()
+                    except Exception as e:
+                        debug.log(f"[CTBC AREA] Reload error: {e}")
+        return tab
+
+    # 5. Seat map page (UTK0205_)
+    if page_type == "seat_map":
+        if _state.get("cart_added"):
+            debug.log("[CTBC] Cart addition already completed, waiting for navigation to checkout page (UTK0206_)...")
+            return tab
+
+        # Step 1 & 2: Select ticket type and pick seats
+        seat_res = await nodriver_ctbc_seat_auto_select(tab, config_dict)
+        status = seat_res.get("status")
+
+        if status == "sold_out":
+            if _state.get("navigating_back"):
+                debug.log("[CTBC SEAT] Already navigating back to area table...")
+                return tab
+
+            _state["navigating_back"] = True
+            # Current area has no available seats! Add to sold out cache and return to area table
+            curr_area = await tab.evaluate('''
+                (() => {
+                    const el = document.querySelector('#PRICE_AREA_NAME, .area');
+                    return el ? (el.value || el.innerText || '').trim() : '';
+                })()
+            ''')
+            if curr_area:
+                _state["sold_out_areas"].add(curr_area)
+                debug.log(f"[CTBC SEAT] Area '{curr_area}' has no available seats! Added to sold out cache, navigating back...")
+            else:
+                debug.log("[CTBC SEAT] Current area has no available seats! Navigating back...")
+
+            await tab.evaluate('''
+                (() => {
+                    if (typeof backUrl !== 'undefined' && backUrl) {
+                        location.href = backUrl;
+                    } else {
+                        top.history.go(-1);
+                    }
+                })()
+            ''')
+            await asyncio.sleep(0.1)
+            return tab
+
+        if status == "loading":
+            return tab
+
+        selected_count = seat_res.get("selected", 0)
+
+        # Step 3: Handle Captcha if present
+        is_captcha_solved = await nodriver_ctbc_captcha_handler(tab, config_dict, ocr)
+
+        # Step 4: Add to cart only when seats are selected!
+        now = time.time()
+        last_submit = _state.get("last_cart_submit_time", 0.0)
+        cooldown_ok = (now - last_submit) >= 1.5
+
+        can_submit = (selected_count > 0) and (
+            is_captcha_solved or not config_dict.get("ocr_captcha", {}).get("enable", True)
+        )
+
+        if can_submit and cooldown_ok and not _state.get("cart_added"):
+            submit_status = await nodriver_ctbc_submit_cart_and_monitor(tab, config_dict)
+            if submit_status == "sold_out":
+                _state["navigating_back"] = True
+                curr_area = await tab.evaluate('''
+                    (() => {
+                        const el = document.querySelector('#PRICE_AREA_NAME, .area');
+                        return el ? (el.value || el.innerText || '').trim() : '';
+                    })()
+                ''')
+                if curr_area:
+                    _state["sold_out_areas"].add(curr_area)
+                    debug.log(f"[CTBC] Area '{curr_area}' sold out upon submission, added to cache")
+                await tab.evaluate('''
+                    (() => {
+                        if (typeof backUrl !== 'undefined' && backUrl) {
+                            location.href = backUrl;
+                        } else {
+                            top.history.go(-1);
+                        }
+                    })()
+                ''')
+
+        return tab
+
+    # 6. Computer auto-assign or voucher area pages (UTK0201_001, UTK0202)
+    if page_type in ("area_computer", "area_voucher"):
+        if _state.get("cart_added"):
+            debug.log("[CTBC] Cart addition already completed, waiting for navigation to checkout page (UTK0206_)...")
+            return tab
+
+        area_res = await nodriver_ctbc_area_auto_select(tab, config_dict)
+        if area_res.get("status") == "navigated":
             return tab
 
         # Set ticket quantity
@@ -1324,7 +1987,6 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
         if can_submit and cooldown_ok and not _state.get("cart_added"):
             submit_status = await nodriver_ctbc_submit_cart_and_monitor(tab, config_dict)
             if submit_status == "sold_out":
-                # Mark current area as sold out so next tick tries fallback
                 curr_area = await tab.evaluate('''
                     (() => {
                         const sel = document.querySelector('select#PRICE, select[id$="_PRICE"]');
@@ -1338,7 +2000,7 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
 
         return tab
 
-    # 5. Homepage / Login page
+    # 7. Homepage / Login page (UTK0101_, UTK0102_)
     if page_type in ("home", "login"):
         await nodriver_ctbc_login(tab, config_dict, ocr)
 
@@ -1350,6 +2012,10 @@ async def nodriver_ctbc_main(tab, url, config_dict, ocr):
                 await tab.get(cfg_homepage)
             except Exception as e:
                 debug.log(f"[CTBC] Navigation error: {e}")
+            return tab
+
+        # Auto select match from homepage / list
+        await nodriver_ctbc_home_auto_select(tab, config_dict)
         return tab
 
     return tab

@@ -722,6 +722,7 @@ async def main(args):
         if _show_timestamp:
             prefix_parts.append(datetime.now().strftime("[%H:%M:%S]"))
         prefix_parts.append(_instance_tag)
+        kwargs_p.setdefault('flush', True)
         _original_print(*prefix_parts, *args_p, **kwargs_p)
     builtins.print = _prefixed_print
 

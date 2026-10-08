@@ -843,6 +843,7 @@ const PROFILE_PLATFORMS = [
     { slug: 'ticketplus',   label: 'TicketPlus 遠大',  homepage: 'https://ticketplus.com.tw' },
     { slug: 'funone',       label: 'FunOne',           homepage: 'https://tickets.funone.io' },
     { slug: 'fansigo',      label: 'FANSI GO',         homepage: 'https://go.fansi.me' },
+    { slug: 'ctbc_brothers',label: '中信兄弟售票',     homepage: 'https://tix.ctbcsports.com/BROTHERS/UTK0101_' },
     { slug: 'ctbc',         label: '中信育樂售票',     homepage: 'https://tix.ctbcsports.com' },
     { slug: 'cityline',     label: 'Cityline',         homepage: 'https://www.cityline.com' },
     { slug: 'urbtix',       label: 'Urbtix',           homepage: 'https://ticket.urbtix.hk' },

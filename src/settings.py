@@ -132,6 +132,8 @@ CONST_SUPPORTED_SITES = ["https://kktix.com"
     ,"https://ticket.com.tw/ (年代)"
     ,"https://tickets.udnfunlife.com/ (udn售票網)"
     ,"https://ticketplus.com.tw/ (遠大)"
+    ,"https://tix.ctbcsports.com/BROTHERS/UTK0101_ (中信兄弟)"
+    ,"https://tix.ctbcsports.com/DEA/UTK0101_ (中信特攻)"
     ,"===[香港或南半球的系統]==="
     ,"http://www.urbtix.hk/ (城市)"
     ,"https://www.cityline.com/ (買飛)"
@@ -192,6 +194,8 @@ def get_default_config():
     config_dict['ctbc']={}
     config_dict["ctbc"]["pickup_method"] = "128"
     config_dict["ctbc"]["payment_method"] = "1"
+    config_dict["ctbc"]["ticket_type_keyword"] = ""
+    config_dict["ctbc"]["auto_submit_checkout"] = False
 
 
     # Contact information
@@ -357,7 +361,7 @@ def migrate_config(config_dict):
 
     # Ensure all default fields exist (fills missing keys from new versions)
     default = get_default_config()
-    for section in ["advanced", "kktix", "tixcraft", "date_auto_select", "area_auto_select", "ocr_captcha", "contact", "accounts", "cityline"]:
+    for section in ["advanced", "kktix", "tixcraft", "date_auto_select", "area_auto_select", "ocr_captcha", "contact", "accounts", "cityline", "ctbc"]:
         if section in default:
             if section not in config_dict or not isinstance(config_dict[section], dict):
                 config_dict[section] = dict(default[section])
